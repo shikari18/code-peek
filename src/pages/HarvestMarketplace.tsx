@@ -1,8 +1,18 @@
 import { DetailShell } from "@/components/DetailShell";
-import { MapPin, Scale, Calendar, ChevronRight, CheckCircle } from "lucide-react";
-import { useState } from "react";
+import { MapPin, Scale, Calendar, ChevronRight, CheckCircle, Plus } from "lucide-react";
+import { useState, useEffect } from "react";
 
-const listings = [
+type Listing = {
+  farmer: string;
+  location: string;
+  species: string;
+  size: string;
+  qty: string;
+  date: string;
+  buyers: string[];
+};
+
+const defaultListings: Listing[] = [
   { farmer: "Emmanuel M.", location: "Volta Lake, Accra", species: "Tilapia", size: "450g avg", qty: "1,200 kg", date: "Jul 12", buyers: ["Restaurant", "Hotel"] },
   { farmer: "Kwame A.", location: "Kumasi Region", species: "Catfish", size: "600g avg", qty: "800 kg", date: "Jul 15", buyers: ["Smokehouse", "Exporter"] },
   { farmer: "Abena S.", location: "Eastern Region", species: "Tilapia", size: "380g avg", qty: "500 kg", date: "Jul 18", buyers: ["Market"] },
@@ -12,7 +22,51 @@ const tabs = ["Available", "My Harvest", "Requests"] as const;
 
 export default function HarvestMarketplace() {
   const [tab, setTab] = useState<(typeof tabs)[number]>("Available");
+  const [listings, setListings] = useState<Listing[]>([]);
   const [requested, setRequested] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    const stored = localStorage.getItem("harvest_listings");
+    if (stored) {
+      try {
+        setListings(JSON.parse(stored));
+      } catch (e) {
+        setListings(defaultListings);
+      }
+    } else {
+      localStorage.setItem("harvest_listings", JSON.stringify(defaultListings));
+      setListings(defaultListings);
+    }
+  }, []);
+
+  const handleRequest = (index: number) => {
+    setRequested((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
+
+  const handleAddDefaultHarvest = () => {
+    const newListing: Listing = {
+      farmer: "Emmanuel M.",
+      location: "Volta Lake, Accra",
+      species: "Tilapia",
+      size: "500g avg",
+      qty: "1,000 kg",
+      date: `Jul ${new Date().getDate()}`,
+      buyers: ["Restaurant"],
+    };
+    const updated = [newListing, ...listings];
+    localStorage.setItem("harvest_listings", JSON.stringify(updated));
+    setListings(updated);
+  };
+
+  const myListings = listings.filter((l) => l.farmer === "Emmanuel M.");
 
   return (
     <DetailShell
@@ -55,7 +109,7 @@ export default function HarvestMarketplace() {
               </div>
               <p className="text-xs text-muted-foreground mt-1">{l.size}</p>
               <button
-                onClick={() => setRequested((prev) => new Set([...prev, i]))}
+                onClick={() => handleRequest(i)}
                 className={`mt-3 w-full py-2.5 rounded-full text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
                   requested.has(i)
                     ? "bg-emerald-100 text-emerald-700"
@@ -72,15 +126,52 @@ export default function HarvestMarketplace() {
       )}
 
       {tab === "My Harvest" && (
-        <div className="mt-8 flex flex-col items-center text-center gap-3 py-10">
-          <div className="h-14 w-14 rounded-full bg-surface border border-border/70 grid place-items-center">
-            <Scale className="h-6 w-6 text-muted-foreground" strokeWidth={1.6} />
-          </div>
-          <p className="font-semibold">No harvest listed yet</p>
-          <p className="text-sm text-muted-foreground max-w-xs">When your fish are ready, press the button below to let buyers know.</p>
-          <button className="mt-2 px-8 py-3 rounded-full bg-primary text-primary-foreground font-medium text-sm shadow-lg">
-            Ready for Harvest
-          </button>
+        <div className="mt-5">
+          {myListings.length > 0 ? (
+            <div className="space-y-3">
+              {myListings.map((l, i) => (
+                <div key={i} className="rounded-2xl bg-white/70 border border-border/70 p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-semibold tracking-tight">{l.species}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">My Harvest Listing</p>
+                    </div>
+                    <div className="flex gap-1 flex-wrap justify-end">
+                      {l.buyers.map((b) => (
+                        <span key={b} className="text-[10px] bg-muted px-2 py-0.5 rounded-full">{b}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex gap-4 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{l.location}</span>
+                    <span className="flex items-center gap-1"><Scale className="h-3 w-3" />{l.qty}</span>
+                    <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{l.date}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{l.size}</p>
+                </div>
+              ))}
+              <button
+                onClick={handleAddDefaultHarvest}
+                className="mt-4 w-full py-3 rounded-full border border-dashed border-border bg-white/40 flex items-center justify-center gap-2 text-sm font-medium text-muted-foreground hover:bg-white/60 transition-colors"
+              >
+                <Plus className="h-4 w-4" /> List Another Harvest
+              </button>
+            </div>
+          ) : (
+            <div className="mt-8 flex flex-col items-center text-center gap-3 py-10">
+              <div className="h-14 w-14 rounded-full bg-surface border border-border/70 grid place-items-center">
+                <Scale className="h-6 w-6 text-muted-foreground" strokeWidth={1.6} />
+              </div>
+              <p className="font-semibold">No harvest listed yet</p>
+              <p className="text-sm text-muted-foreground max-w-xs">When your fish are ready, press the button below to let buyers know.</p>
+              <button
+                onClick={handleAddDefaultHarvest}
+                className="mt-2 px-8 py-3 rounded-full bg-primary text-primary-foreground font-medium text-sm shadow-lg"
+              >
+                Ready for Harvest
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -96,3 +187,4 @@ export default function HarvestMarketplace() {
     </DetailShell>
   );
 }
+
