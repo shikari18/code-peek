@@ -1,0 +1,94 @@
+import { Link } from "wouter";
+import { PhoneShell } from "@/components/PhoneShell";
+import { Play, Calculator, Stethoscope, TrendingUp, Bell, ChevronRight, Users, ShoppingCart, BarChart2, Wifi } from "lucide-react";
+import weatherImg from "@/assets/weather-storm.jpg";
+
+const quickAccess = [
+  { to: "/feed-calculator", icon: Calculator, title: "Feed Calculator", sub: "Calculate today's feed" },
+  { to: "/fish-doctor", icon: Stethoscope, title: "Fish Doctor", sub: "AI diagnosis" },
+  { to: "/market-prices", icon: TrendingUp, title: "Market Prices", sub: "Today's pricing" },
+  { to: "/pond-alerts", icon: Bell, title: "Pond Alerts", sub: "View alerts" },
+  { to: "/community-buying", icon: Users, title: "Community Buying", sub: "Buy feed cheaper together" },
+  { to: "/harvest-marketplace", icon: ShoppingCart, title: "Harvest Marketplace", sub: "Sell directly to buyers" },
+  { to: "/credit-score", icon: BarChart2, title: "Fish Credit Score", sub: "Unlock farm financing" },
+  { to: "/pond-device", icon: Wifi, title: "Pond Device", sub: "Live sensor readings" },
+] as const;
+
+export default function Home() {
+  return (
+    <PhoneShell>
+      <div className="px-6 pt-4">
+        <h1 className="display text-5xl text-foreground">Good morning,</h1>
+        <h2 className="display-bold text-6xl text-foreground mt-1">Emmanuel</h2>
+        <div className="mt-5 text-sm text-muted-foreground">
+          <p className="text-foreground/80 font-medium">Volta Lake Farm</p>
+          <p>Accra Region</p>
+        </div>
+
+        <div className="mt-7 rounded-2xl bg-white/70 backdrop-blur border border-border/70 p-5 flex items-start gap-4 shadow-[0_2px_20px_-8px_rgba(15,23,42,0.08)]">
+          <div className="flex-1">
+            <p className="eyebrow">Today</p>
+            <h3 className="mt-2 text-xl font-medium tracking-tight">Feed before 2PM</h3>
+            <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+              Storm expected at 3PM.<br />Market prices increased in Kumasi.
+            </p>
+          </div>
+          <button
+            aria-label="Play briefing"
+            className="h-11 w-11 shrink-0 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-lg"
+          >
+            <Play className="h-4 w-4 ml-0.5" fill="currentColor" />
+          </button>
+        </div>
+
+        <div className="mt-5 grid grid-cols-3 gap-2">
+          <Stat value="47" label="Grow Day" />
+          <Stat value="23" label="Days Left" />
+          <Stat value="24,560" label="Projected Revenue" small />
+        </div>
+
+        <p className="mt-8 text-sm text-muted-foreground">Quick Access</p>
+        <div className="mt-3 divide-y divide-border/70">
+          {quickAccess.map((q) => (
+            <Link key={q.to} href={q.to} className="flex items-center gap-4 py-4 group">
+              <div className="h-11 w-11 rounded-full bg-surface border border-border/70 grid place-items-center shrink-0">
+                <q.icon className="h-[18px] w-[18px]" strokeWidth={1.6} />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold tracking-tight">{q.title}</p>
+                <p className="text-sm text-muted-foreground">{q.sub}</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-8 mx-4 rounded-2xl overflow-hidden relative border border-border/70 min-h-[180px]">
+        <img
+          src={weatherImg}
+          alt="Storm clouds over the lake"
+          width={768}
+          height={512}
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
+        <div className="relative z-10 p-6 pr-32 text-white">
+          <p className="text-sm font-medium opacity-90">Storm arriving</p>
+          <p className="display text-5xl mt-1">3PM</p>
+          <p className="text-sm mt-3 opacity-80 max-w-[200px]">Heavy rain expected this afternoon.</p>
+        </div>
+      </div>
+    </PhoneShell>
+  );
+}
+
+function Stat({ value, label, small }: { value: string; label: string; small?: boolean }) {
+  return (
+    <div className="rounded-2xl px-3 py-4 text-center">
+      <p className={`display-bold ${small ? "text-lg" : "text-3xl"} text-foreground`}>{value}</p>
+      <p className="mt-1 text-[10px] text-muted-foreground whitespace-nowrap">{label}</p>
+    </div>
+  );
+}
