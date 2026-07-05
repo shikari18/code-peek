@@ -1,7 +1,61 @@
 import { Link } from "wouter";
 import { PhoneShell } from "@/components/PhoneShell";
 import { Play, Calculator, Stethoscope, TrendingUp, Bell, ChevronRight, Users, ShoppingCart, BarChart2, Wifi } from "lucide-react";
-import weatherImg from "@/assets/weather-storm.jpg";
+import stormImg from "@/assets/weather-storm.jpg";
+import sunshineImg from "@/assets/weather-sunshine.jpg";
+import nightImg from "@/assets/weather-night.jpg";
+import cloudyImg from "@/assets/weather-cloudy.jpg";
+
+type Weather = {
+  src: string;
+  alt: string;
+  headline: string;
+  time: string;
+  detail: string;
+};
+
+function getWeather(now = new Date()): Weather {
+  const h = now.getHours();
+  // 12–17 → storm (matches the "storm arriving 3PM" briefing)
+  if (h >= 12 && h < 18) {
+    return {
+      src: stormImg,
+      alt: "Storm clouds over the lake",
+      headline: "Storm arriving",
+      time: "3PM",
+      detail: "Heavy rain expected this afternoon.",
+    };
+  }
+  // 19–5 → night
+  if (h >= 19 || h < 6) {
+    return {
+      src: nightImg,
+      alt: "Calm lake under a starry night sky",
+      headline: "Calm night",
+      time: "Clear",
+      detail: "Low winds. Good conditions until dawn.",
+    };
+  }
+  // 6–11 → sunshine (morning)
+  if (h >= 6 && h < 10) {
+    return {
+      src: sunshineImg,
+      alt: "Bright sunny morning over the lake",
+      headline: "Bright morning",
+      time: "Sunny",
+      detail: "Feed early — warm and clear until noon.",
+    };
+  }
+  // 10–12 → building clouds
+  return {
+    src: cloudyImg,
+    alt: "Overcast skies over the lake",
+    headline: "Cloud cover",
+    time: "Mild",
+    detail: "Overcast midday. Expect rain by afternoon.",
+  };
+}
+
 
 const quickAccess = [
   { to: "/feed-calculator", icon: Calculator, title: "Feed Calculator", sub: "Calculate today's feed" },
@@ -64,23 +118,30 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="mt-8 mx-4 rounded-2xl overflow-hidden relative border border-border/70 min-h-[180px]">
-        <img
-          src={weatherImg}
-          alt="Storm clouds over the lake"
-          width={768}
-          height={512}
-          loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
-        <div className="relative z-10 p-6 pr-32 text-white">
-          <p className="text-sm font-medium opacity-90">Storm arriving</p>
-          <p className="display text-5xl mt-1">3PM</p>
-          <p className="text-sm mt-3 opacity-80 max-w-[200px]">Heavy rain expected this afternoon.</p>
-        </div>
-      </div>
+      <WeatherHero />
     </PhoneShell>
+  );
+}
+
+function WeatherHero() {
+  const w = getWeather();
+  return (
+    <div className="mt-8 mx-4 rounded-2xl overflow-hidden relative border border-border/70 min-h-[180px]">
+      <img
+        src={w.src}
+        alt={w.alt}
+        width={768}
+        height={512}
+        loading="lazy"
+        className="absolute inset-0 h-full w-full object-cover"
+      />
+      <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
+      <div className="relative z-10 p-6 pr-32 text-white">
+        <p className="text-sm font-medium opacity-90">{w.headline}</p>
+        <p className="display text-5xl mt-1">{w.time}</p>
+        <p className="text-sm mt-3 opacity-80 max-w-[200px]">{w.detail}</p>
+      </div>
+    </div>
   );
 }
 
