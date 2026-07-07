@@ -370,11 +370,11 @@ export default function Assistant() {
       pcmPlayerRef.current = new PCMPlayer(24000);
       pcmPlayerRef.current.init();
 
-      // 2. Determine connection endpoint and parameter dynamically based on token format
+      // 2. Determine query parameter dynamically based on token format
       const isStandardApiKey = apiKey.startsWith("AIzaSy");
       const wsUrl = isStandardApiKey
         ? `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`
-        : `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${apiKey}`;
+        : `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?access_token=${apiKey}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
