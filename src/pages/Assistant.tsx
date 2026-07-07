@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { PhoneShell } from "@/components/PhoneShell";
 import { Video, VideoOff, Square, MicOff, Mic, Settings, X, Info } from "lucide-react";
 
-// Google Chirp3 realistic female voice for Gemini Live (default custom voice ID)
-const DEFAULT_VOICE_ID = "AQ." + "Ab8RN6LDEFQ8lF5Hs" + "5c57nYecm3fHXuNjp" + "qJEexkiyy4_xB0Fw";
 // Fixed API Key provided by user
 const FIXED_API_KEY = "AQ." + "Ab8RN6LDEFQ8lF5Hs" + "5c57nYecm3fHXuNjp" + "qJEexkiyy4_xB0Fw";
 // Fixed Model
@@ -112,7 +110,8 @@ class PCMPlayer {
 
 export default function Assistant() {
   const [selectedVoice, setSelectedVoice] = useState(() => {
-    return localStorage.getItem("gemini_live_voice") || "Aoede";
+    const saved = localStorage.getItem("gemini_live_voice");
+    return saved && !saved.startsWith("AQ.") ? saved : "Aoede";
   });
   const [selectedLanguage, setSelectedLanguage] = useState(() => {
     return localStorage.getItem("gemini_live_language") || "en-US";
@@ -371,11 +370,12 @@ export default function Assistant() {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        // Construct voice config dynamically
-        const isCustomVoice = selectedVoice.startsWith("AQ.");
-        const voiceConfigObj = isCustomVoice
-          ? { customVoiceConfig: { customVoiceId: selectedVoice } }
-          : { prebuiltVoiceConfig: { voiceName: selectedVoice } };
+        // Construct voice config (Gemini Live API only supports prebuilt voices)
+        const voiceConfigObj = {
+          prebuiltVoiceConfig: {
+            voiceName: selectedVoice,
+          },
+        };
 
         // Send setup message
         const setupMessage = {
@@ -866,7 +866,6 @@ export default function Assistant() {
                     className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-primary appearance-none cursor-pointer"
                   >
                     <option value="Aoede">Aoede (Realistic Female)</option>
-                    <option value={DEFAULT_VOICE_ID}>Google Chirp 3 (Custom Voice)</option>
                     <option value="Puck">Puck (Prebuilt)</option>
                     <option value="Charon">Charon (Prebuilt)</option>
                     <option value="Kore">Kore (Prebuilt)</option>
