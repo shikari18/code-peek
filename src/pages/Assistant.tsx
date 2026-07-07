@@ -109,6 +109,9 @@ class PCMPlayer {
 }
 
 export default function Assistant() {
+  const [apiKey, setApiKey] = useState(() => {
+    return localStorage.getItem("gemini_live_api_key") || FIXED_API_KEY;
+  });
   const [selectedVoice, setSelectedVoice] = useState(() => {
     const saved = localStorage.getItem("gemini_live_voice");
     return saved && !saved.startsWith("AQ.") ? saved : "Aoede";
@@ -118,6 +121,7 @@ export default function Assistant() {
   });
 
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [tempKey, setTempKey] = useState(apiKey);
   const [tempVoice, setTempVoice] = useState(selectedVoice);
   const [tempLanguage, setTempLanguage] = useState(selectedLanguage);
 
@@ -184,8 +188,10 @@ export default function Assistant() {
   const handleSaveVoiceSettings = () => {
     localStorage.setItem("gemini_live_voice", tempVoice);
     localStorage.setItem("gemini_live_language", tempLanguage);
+    localStorage.setItem("gemini_live_api_key", tempKey);
     setSelectedVoice(tempVoice);
     setSelectedLanguage(tempLanguage);
+    setApiKey(tempKey);
     setShowVoiceSettings(false);
   };
 
@@ -365,7 +371,7 @@ export default function Assistant() {
       pcmPlayerRef.current.init();
 
       // 2. Open WebSocket
-      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${FIXED_API_KEY}`;
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -723,6 +729,7 @@ export default function Assistant() {
                 onClick={() => {
                   setTempVoice(selectedVoice);
                   setTempLanguage(selectedLanguage);
+                  setTempKey(apiKey);
                   setShowVoiceSettings(true);
                 }}
                 className="h-10 w-10 rounded-full border border-border/70 bg-white grid place-items-center shadow-sm text-muted-foreground hover:text-foreground active:scale-95 transition-transform"
@@ -887,6 +894,17 @@ export default function Assistant() {
                     <option value="es-ES">Spanish (Spain)</option>
                   </select>
                 </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1">Gemini API Key</label>
+                  <input
+                    type="password"
+                    value={tempKey}
+                    onChange={(e) => setTempKey(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-primary"
+                    placeholder="AIzaSy..."
+                  />
+                </div>
               </div>
 
               <div className="mt-6 flex gap-3">
@@ -894,6 +912,7 @@ export default function Assistant() {
                   onClick={() => {
                     setTempVoice("Aoede");
                     setTempLanguage("en-US");
+                    setTempKey(FIXED_API_KEY);
                   }}
                   className="flex-1 py-3 rounded-full border border-border text-sm font-medium text-muted-foreground active:scale-95 transition-all"
                 >
