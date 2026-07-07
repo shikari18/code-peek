@@ -13,6 +13,7 @@ import PondAlerts from "@/pages/PondAlerts";
 import Profile from "@/pages/Profile";
 import SignIn from "@/pages/SignIn";
 import Welcome from "@/pages/Welcome";
+import Onboarding from "@/pages/Onboarding";
 import CommunityBuying from "@/pages/CommunityBuying";
 import HarvestMarketplace from "@/pages/HarvestMarketplace";
 import CreditScore from "@/pages/CreditScore";
@@ -21,7 +22,7 @@ import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
 
-const NO_NAV_ROUTES = new Set(["/", "/welcome", "/signin"]);
+const NO_NAV_ROUTES = new Set(["/", "/welcome", "/signin", "/onboarding"]);
 
 function wrap(Component: React.ComponentType) {
   return function WrappedPage() {
@@ -53,6 +54,7 @@ function AppShell() {
             <Route path="/profile" component={wrap(Profile)} />
             <Route path="/signin" component={wrap(SignIn)} />
             <Route path="/welcome" component={wrap(Welcome)} />
+            <Route path="/onboarding" component={wrap(Onboarding)} />
             <Route path="/community-buying" component={wrap(CommunityBuying)} />
             <Route path="/harvest-marketplace" component={wrap(HarvestMarketplace)} />
             <Route path="/credit-score" component={wrap(CreditScore)} />

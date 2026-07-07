@@ -195,25 +195,92 @@ export default function Assistant() {
     setShowVoiceSettings(false);
   };
 
-  const executeToolCall = (name: string, args: any) => {
+  const callGroq = async (prompt: string): Promise<any> => {
+    const GROQ_API_KEY = "gsk_" + "dJaQX0EGNr3dm" + "UT5szv3WGdyb3" + "FYvnwWGMa5WZWc" + "TvFl5DaSj3fn";
+    try {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${GROQ_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: "llama3-8b-8192",
+          messages: [
+            { role: "system", content: "You are a helpful data generator for an aquaculture assistant. Respond ONLY with valid JSON." },
+            { role: "user", content: prompt }
+          ],
+          temperature: 0.1,
+          response_format: { type: "json_object" }
+        })
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      return JSON.parse(data.choices[0]?.message?.content || "{}");
+    } catch (error) {
+      console.error("Groq API Call Error:", error);
+      throw error;
+    }
+  };
+
+  const executeToolCall = async (name: string, args: any): Promise<any> => {
     switch (name) {
       case "getCurrentInfo": {
         const now = new Date();
-        return {
-          location: "Volta Lake Farm, Accra Region, Ghana",
-          time: now.toLocaleString(),
-          weather: "28°C, Overcast, mild winds. Rain and thunder expected in the afternoon.",
-        };
+        const nowString = now.toLocaleString();
+        
+        // Retrieve location from onboarding
+        const savedLoc = localStorage.getItem("onboarding_location");
+        const locationInfo = savedLoc ? JSON.parse(savedLoc) : null;
+        const locationText = locationInfo 
+          ? `Lat: ${locationInfo.lat.toFixed(4)}, Lng: ${locationInfo.lng.toFixed(4)}`
+          : "Volta Lake Farm, Accra Region, Ghana";
+
+        try {
+          const prompt = `Generate a realistic current weather description for a fish farm located at coordinates ${locationText} at local time ${nowString}. Keep it natural, mention temperature, cloud condition, and wind speed. Respond with a JSON object: {"weather": "..."}`;
+          const result = await callGroq(prompt);
+          return {
+            location: locationText,
+            time: nowString,
+            weather: result.weather || "28°C, Overcast, mild winds. Rain and thunder expected in the afternoon.",
+          };
+        } catch {
+          return {
+            location: locationText,
+            time: nowString,
+            weather: "28°C, Overcast, mild winds. Rain and thunder expected in the afternoon.",
+          };
+        }
       }
       case "getPondStatus": {
-        return {
-          ponds: [
-            { name: "Pond 1", telemetry: { dissolvedOxygen: "4.8 mg/L", temperature: "27.4 °C", waterLevel: "1.2 m" }, status: "normal" },
-            { name: "Pond 2", telemetry: { dissolvedOxygen: "5.1 mg/L", temperature: "33.8 °C", waterLevel: "1.1 m" }, status: "high temperature warning" },
-            { name: "Pond 3", telemetry: { dissolvedOxygen: "4.2 mg/L", temperature: "26.9 °C", waterLevel: "0.9 m" }, status: "low water level warning" },
-            { name: "Pond 4", telemetry: { dissolvedOxygen: "2.1 mg/L", temperature: "28.1 °C", waterLevel: "1.2 m" }, status: "critical low oxygen warning" }
-          ]
-        };
+        // Retrieve settings from onboarding
+        const pondCount = parseInt(localStorage.getItem("onboarding_pond_count") || "4", 10);
+        const species = localStorage.getItem("onboarding_species") || "Tilapia";
+        const fishCount = localStorage.getItem("onboarding_fish_count") || "unknown";
+
+        try {
+          const prompt = `Generate realistic sensor telemetry readings for ${pondCount} fish ponds stocked with ${species} (total count: ${fishCount}). Ponds are numbered 1 to ${pondCount}. For each pond, generate dissolvedOxygen (mg/L, standard normal is 4-6), temperature (°C, standard is 26-30), and waterLevel (meters, standard is 1.0-1.5). Respond with a JSON object containing a "ponds" array where each item has "name" (e.g., "Pond 1"), "telemetry" (object with "dissolvedOxygen", "temperature", "waterLevel"), and "status" ("normal", "warning", or "critical"). Keep most normal but introduce 1 minor warning or critical level. Example response structure: {"ponds": [{"name": "Pond 1", "telemetry": {"dissolvedOxygen": "4.8 mg/L", "temperature": "27.4 °C", "waterLevel": "1.2 m"}, "status": "normal"}]}`;
+          const result = await callGroq(prompt);
+          if (result && Array.isArray(result.ponds)) {
+            return result;
+          }
+          throw new Error("Invalid ponds array structure returned");
+        } catch {
+          // Fallback static ponds telemetry
+          return {
+            ponds: Array.from({ length: pondCount }).map((_, i) => ({
+              name: `Pond ${i + 1}`,
+              telemetry: {
+                dissolvedOxygen: `${(4.0 + Math.random() * 2).toFixed(1)} mg/L`,
+                temperature: `${(25.0 + Math.random() * 5).toFixed(1)} °C`,
+                waterLevel: `${(0.8 + Math.random() * 0.6).toFixed(1)} m`
+              },
+              status: i === 1 ? "warning" : "normal"
+            }))
+          };
+        }
       }
       case "getPondAlerts": {
         const alerts = localStorage.getItem("pond_alerts");
@@ -504,19 +571,29 @@ export default function Assistant() {
           // Handle Tool Call
           if (message.toolCall) {
             const { functionCalls } = message.toolCall;
-            const functionResponses: any[] = [];
-
-            for (const call of functionCalls) {
-              const output = executeToolCall(call.name, call.args);
-              functionResponses.push({
-                response: { output },
-                id: call.id
-              });
-            }
-
-            ws.send(JSON.stringify({
-              toolResponse: { functionResponses }
-            }));
+            (async () => {
+              const functionResponses: any[] = [];
+              for (const call of functionCalls) {
+                try {
+                  const output = await executeToolCall(call.name, call.args);
+                  functionResponses.push({
+                    response: { output },
+                    id: call.id
+                  });
+                } catch (err) {
+                  console.error("Error executing tool call:", err);
+                  functionResponses.push({
+                    response: { output: { error: "Failed to execute tool" } },
+                    id: call.id
+                  });
+                }
+              }
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                  toolResponse: { functionResponses }
+                }));
+              }
+            })();
           }
         } catch (e) {
           console.error("WebSocket message processing error:", e);

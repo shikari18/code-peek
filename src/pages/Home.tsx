@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import { PhoneShell } from "@/components/PhoneShell";
 import { Play, Calculator, Stethoscope, TrendingUp, Bell, ChevronRight, Users, ShoppingCart, BarChart2, Wifi } from "lucide-react";
@@ -69,6 +70,20 @@ const quickAccess = [
 ] as const;
 
 export default function Home() {
+  const [showOnboardingBanner] = useState(() => {
+    return localStorage.getItem("onboarding_completed") !== "true";
+  });
+
+  const completedSteps = (() => {
+    let count = 0;
+    if (localStorage.getItem("onboarding_location")) count++;
+    if (localStorage.getItem("onboarding_pond_count")) count++;
+    if (localStorage.getItem("onboarding_pond_images")) count++;
+    if (localStorage.getItem("onboarding_fish_count")) count++;
+    if (localStorage.getItem("onboarding_species")) count++;
+    return count;
+  })();
+
   return (
     <PhoneShell>
       <div className="px-6 pt-4">
@@ -78,6 +93,37 @@ export default function Home() {
           <p className="text-foreground/80 font-medium">Volta Lake Farm</p>
           <p>Accra Region</p>
         </div>
+
+        {/* Onboarding Incomplete Banner */}
+        {showOnboardingBanner && (
+          <div className="mt-6 p-4 rounded-2xl bg-amber-50 border border-amber-200/60 shadow-[0_4px_16px_-4px_rgba(245,158,11,0.15)]">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Setup Incomplete</p>
+                <h3 className="mt-1 font-semibold text-[15px] text-slate-800">Complete your farm profile</h3>
+                <p className="mt-1 text-xs text-amber-850 leading-snug">
+                  Finish all setup steps to calibrate your AI Fish Doctor recommendations.
+                </p>
+              </div>
+              <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-1 rounded-full shrink-0">
+                {completedSteps}/5 steps
+              </span>
+            </div>
+            
+            {/* Progress Bar */}
+            <div className="mt-3.5 h-1.5 w-full bg-amber-200/40 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-amber-500 rounded-full transition-all duration-500" 
+                style={{ width: `${(completedSteps / 5) * 100}%` }}
+              />
+            </div>
+
+            <Link href="/onboarding" className="mt-4 flex items-center justify-center gap-1.5 w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold shadow-sm active:scale-95 transition-all">
+              <span>Continue Onboarding</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        )}
 
         <div className="mt-7 rounded-2xl bg-white/70 backdrop-blur border border-border/70 p-5 flex items-start gap-4 shadow-[0_2px_20px_-8px_rgba(15,23,42,0.08)]">
           <div className="flex-1">

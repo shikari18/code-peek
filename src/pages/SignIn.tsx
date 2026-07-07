@@ -25,11 +25,11 @@ export default function SignIn() {
         </p>
 
         <div className="mt-8 space-y-3">
-          <button onClick={() => navigate("/home")} className="w-full py-3.5 rounded-full bg-white border border-border/70 flex items-center justify-center gap-3 font-medium text-[15px] shadow-sm hover:bg-accent/40 transition-colors">
+          <button onClick={() => navigate("/onboarding")} className="w-full py-3.5 rounded-full bg-white border border-border/70 flex items-center justify-center gap-3 font-medium text-[15px] shadow-sm hover:bg-accent/40 transition-colors">
             <GoogleIcon />
             Continue with Google
           </button>
-          <button onClick={() => navigate("/home")} className="w-full py-3.5 rounded-full bg-black text-white flex items-center justify-center gap-3 font-medium text-[15px] shadow-sm">
+          <button onClick={() => navigate("/onboarding")} className="w-full py-3.5 rounded-full bg-black text-white flex items-center justify-center gap-3 font-medium text-[15px] shadow-sm">
             <AppleIcon />
             Continue with Apple
           </button>
@@ -44,7 +44,7 @@ export default function SignIn() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            navigate("/home");
+            navigate("/onboarding");
           }}
           className="space-y-3"
         >
