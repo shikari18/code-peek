@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { PhoneShell } from "@/components/PhoneShell";
 import { Video, VideoOff, Square, MicOff, Mic, Settings, X, Info } from "lucide-react";
 
-// Fixed API Key provided by user
-const FIXED_API_KEY = "AQ." + "Ab8RN6LDEFQ8lF5Hs" + "5c57nYecm3fHXuNjp" + "qJEexkiyy4_xB0Fw";
+// Fixed API Key provided by user, supports VITE_GEMINI_API_KEY override
+const FIXED_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || ("AQ." + "Ab8RN6LDEFQ8lF5Hs" + "5c57nYecm3fHXuNjp" + "qJEexkiyy4_xB0Fw");
 // Fixed Model
 const FIXED_MODEL = "models/gemini-3.1-flash-live-preview";
 
