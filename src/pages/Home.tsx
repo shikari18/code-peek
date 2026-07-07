@@ -70,10 +70,6 @@ const quickAccess = [
 ] as const;
 
 export default function Home() {
-  const [showOnboardingBanner] = useState(() => {
-    return localStorage.getItem("onboarding_completed") !== "true";
-  });
-
   const completedSteps = (() => {
     let count = 0;
     if (localStorage.getItem("onboarding_location")) count++;
@@ -84,14 +80,33 @@ export default function Home() {
     return count;
   })();
 
+  const [showOnboardingBanner] = useState(() => {
+    const completed = localStorage.getItem("onboarding_completed");
+    return completed !== "true" || completedSteps < 5;
+  });
+
+  const locationText = (() => {
+    const saved = localStorage.getItem("onboarding_location");
+    if (!saved) return { farm: "Farm Setup Incomplete", region: "Location not configured" };
+    try {
+      const coords = JSON.parse(saved);
+      return { 
+        farm: "Volta Lake Farm", 
+        region: `Lat: ${coords.lat.toFixed(2)}, Lng: ${coords.lng.toFixed(2)}` 
+      };
+    } catch {
+      return { farm: "Volta Lake Farm", region: "Accra Region" };
+    }
+  })();
+
   return (
     <PhoneShell>
       <div className="px-6 pt-4">
         <h1 className="display text-5xl text-foreground">Good morning,</h1>
         <h2 className="display-bold text-6xl text-foreground mt-1">Emmanuel</h2>
         <div className="mt-5 text-sm text-muted-foreground">
-          <p className="text-foreground/80 font-medium">Volta Lake Farm</p>
-          <p>Accra Region</p>
+          <p className="text-foreground/80 font-medium">{locationText.farm}</p>
+          <p>{locationText.region}</p>
         </div>
 
         {/* Onboarding Incomplete Banner */}
@@ -128,23 +143,37 @@ export default function Home() {
         <div className="mt-7 rounded-2xl bg-white/70 backdrop-blur border border-border/70 p-5 flex items-start gap-4 shadow-[0_2px_20px_-8px_rgba(15,23,42,0.08)]">
           <div className="flex-1">
             <p className="eyebrow">Today</p>
-            <h3 className="mt-2 text-xl font-medium tracking-tight">Feed before 2PM</h3>
-            <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-              Storm expected at 3PM.<br />Market prices increased in Kumasi.
-            </p>
+            {completedSteps < 5 ? (
+              <>
+                <h3 className="mt-2 text-xl font-medium tracking-tight text-amber-800">Setup Incomplete</h3>
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                  Complete onboarding to enable weather storm warnings and grow advisories.
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="mt-2 text-xl font-medium tracking-tight">Feed before 2PM</h3>
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                  Storm expected at 3PM.<br />Market prices increased in Kumasi.
+                </p>
+              </>
+            )}
           </div>
           <button
             aria-label="Play briefing"
-            className="h-11 w-11 shrink-0 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-lg"
+            disabled={completedSteps < 5}
+            className={`h-11 w-11 shrink-0 rounded-full grid place-items-center shadow-lg transition-all ${
+              completedSteps < 5 ? "bg-slate-300 text-slate-500 cursor-not-allowed opacity-60" : "bg-primary text-primary-foreground active:scale-95"
+            }`}
           >
             <Play className="h-4 w-4 ml-0.5" fill="currentColor" />
           </button>
         </div>
 
         <div className="mt-5 grid grid-cols-3 gap-2">
-          <Stat value="47" label="Grow Day" />
-          <Stat value="23" label="Days Left" />
-          <Stat value="24,560" label="Projected Revenue" small />
+          <Stat value={completedSteps < 5 ? "--" : "47"} label="Grow Day" />
+          <Stat value={completedSteps < 5 ? "--" : "23"} label="Days Left" />
+          <Stat value={completedSteps < 5 ? "--" : "24,560"} label="Projected Revenue" small />
         </div>
 
         <p className="mt-8 text-sm text-muted-foreground">Quick Access</p>

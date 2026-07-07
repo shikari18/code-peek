@@ -7,7 +7,7 @@ export function DetailShell({ title, subtitle, children }: { title: string; subt
   return (
     <PhoneShell showTopBar={false}>
       <div className="px-6 pt-6">
-        <Link href="/" aria-label="Back" className="h-9 w-9 -ml-2 grid place-items-center rounded-full hover:bg-accent/60">
+        <Link href="/home" aria-label="Back" className="h-9 w-9 -ml-2 grid place-items-center rounded-full hover:bg-accent/60">
           <ArrowLeft className="h-5 w-5" strokeWidth={1.6} />
         </Link>
         <h1 className="display text-5xl mt-6">{title}</h1>
