@@ -3,7 +3,7 @@ import { PhoneShell } from "@/components/PhoneShell";
 import { Video, VideoOff, Square, MicOff, Mic, Settings, X, Info } from "lucide-react";
 
 // Fixed API Key provided by user, supports VITE_GEMINI_API_KEY override
-const FIXED_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || ("AQ." + "Ab8RN6LDEFQ8lF5Hs" + "5c57nYecm3fHXuNjp" + "qJEexkiyy4_xB0Fw");
+const FIXED_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 // Fixed Model
 const FIXED_MODEL = "models/gemini-3.1-flash-live-preview";
 
@@ -50,16 +50,22 @@ class PCMPlayer {
     this.sampleRate = sampleRate;
   }
 
-  init() {
+  async init() {
     if (!this.audioCtx) {
       this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: this.sampleRate });
-      this.nextPlayTime = this.audioCtx.currentTime;
     }
+    if (this.audioCtx.state === 'suspended') {
+      await this.audioCtx.resume();
+    }
+    this.nextPlayTime = this.audioCtx.currentTime;
+    console.log("[PCMPlayer] Playback AudioContext state:", this.audioCtx.state);
   }
 
   playChunk(base64Data: string) {
-    this.init();
-    if (!this.audioCtx) return;
+    if (!this.audioCtx) {
+      this.init();
+      return;
+    }
     if (this.audioCtx.state === 'suspended') {
       this.audioCtx.resume();
     }
@@ -110,7 +116,16 @@ class PCMPlayer {
 
 export default function Assistant() {
   const [apiKey, setApiKey] = useState(() => {
-    return localStorage.getItem("gemini_live_api_key") || FIXED_API_KEY;
+    const saved = localStorage.getItem("gemini_live_api_key");
+    // Only accept saved keys starting with the new valid key prefix.
+    // This cleans up any legacy placeholders or custom invalid keys in the user's browser.
+    if (saved && saved.startsWith("AQ.Ab8RN6Ln")) {
+      return saved;
+    }
+    if (saved) {
+      localStorage.removeItem("gemini_live_api_key");
+    }
+    return FIXED_API_KEY;
   });
   const [selectedVoice, setSelectedVoice] = useState(() => {
     const saved = localStorage.getItem("gemini_live_voice");
@@ -129,6 +144,12 @@ export default function Assistant() {
   const [status, setStatus] = useState<"idle" | "connecting" | "listening" | "speaking">("idle");
   const [videoOn, setVideoOn] = useState(false);
   const [muted, setMuted] = useState(false);
+
+  // Ref to hold the current muted state to avoid stale closure issues in the audio worklet
+  const mutedRef = useRef(muted);
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
   const [error, setError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -423,6 +444,19 @@ export default function Assistant() {
       streamRef.current = stream;
       setVideoOn(useVideo);
 
+      // Log audio track state for diagnostic purposes
+      const audioTrack = stream.getAudioTracks()[0];
+      if (audioTrack) {
+        console.log("[GeminiLive] Microphone acquired:", {
+          label: audioTrack.label,
+          enabled: audioTrack.enabled,
+          muted: audioTrack.muted,
+          readyState: audioTrack.readyState
+        });
+      } else {
+        console.warn("[GeminiLive] No audio track found in stream!");
+      }
+
       // Attach stream to <video> element if video mode is on
       if (useVideo) {
         requestAnimationFrame(() => {
@@ -435,10 +469,11 @@ export default function Assistant() {
 
       // Initialize audio output player
       pcmPlayerRef.current = new PCMPlayer(24000);
-      pcmPlayerRef.current.init();
+      await pcmPlayerRef.current.init();
 
       // 2. Open WebSocket
-      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+      console.log("[GeminiLive] Connecting to WebSocket. Model:", FIXED_MODEL, "API Key prefix:", apiKey ? apiKey.substring(0, 12) + "..." : "none");
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -449,6 +484,30 @@ export default function Assistant() {
             voiceName: selectedVoice,
           },
         };
+
+        // Read dynamic context from localStorage to give the AI full access to user and farm state
+        const localTime = new Date().toLocaleString();
+        const userLocation = localStorage.getItem("onboarding_location") || "Accra Region, Ghana";
+        const pondCount = localStorage.getItem("onboarding_pond_count") || "4";
+        const species = localStorage.getItem("onboarding_species") || "Tilapia";
+        const fishCount = localStorage.getItem("onboarding_fish_count") || "unknown";
+        const alertsText = localStorage.getItem("pond_alerts") || "[]";
+        const harvestText = localStorage.getItem("harvest_listings") || "[]";
+        const feedText = localStorage.getItem("feed_calculations") || "[]";
+
+        const dynamicContext = `
+--- DYNAMIC FARM CONTEXT (ACCESSED AT CONNECT TIME) ---
+- Current Local Date & Time on User Device: ${localTime}
+- Farm Location: ${userLocation}
+- Onboarded Ponds Count: ${pondCount}
+- Primary Fish Species: ${species}
+- Total Fish Count: ${fishCount}
+- Current Active Pond Alerts: ${alertsText}
+- Stored Harvest Listings: ${harvestText}
+- Recent Feed Calculations: ${feedText}
+
+You know exactly what page the user is on (they are on the AI voice call assistant page, which is a subpage of the farm dashboard). You have full visibility of all active alerts and listings. Answer questions directly using this context without saying you are calling a tool unless you need fresh/updated telemetry.
+`;
 
         // Send setup message
         const setupMessage = {
@@ -461,7 +520,13 @@ export default function Assistant() {
               },
             },
             systemInstruction: {
-              parts: [{ text: SYSTEM_PROMPT }],
+              parts: [{ text: SYSTEM_PROMPT + "\n" + dynamicContext }],
+            },
+            realtimeInputConfig: {
+              automaticActivityDetection: {
+                disabled: false,
+                silenceDurationMs: 100
+              }
             },
             tools: [
               {
@@ -535,11 +600,45 @@ export default function Assistant() {
 
       ws.onmessage = async (event) => {
         try {
-          const message = JSON.parse(event.data);
+          let text = "";
+          if (typeof event.data === 'string') {
+            text = event.data;
+          } else if (event.data instanceof Blob) {
+            text = await event.data.text();
+          } else if (event.data && typeof event.data.text === 'function') {
+            text = await event.data.text();
+          } else {
+            text = event.data.toString();
+          }
+
+          const message = JSON.parse(text);
+          console.log("[GeminiLive] Message received from server:", message);
 
           // Handle Setup Complete
           if (message.setupComplete) {
-            setStatus("listening");
+            console.log("[GeminiLive] Setup completed successfully!");
+            setStatus("speaking");
+
+            // Trigger an immediate short greeting turn from the AI
+            const greetingPrompt = {
+              clientContent: {
+                turns: [
+                  {
+                    role: "user",
+                    parts: [
+                      {
+                        text: "Hello! Please give a very short, warm greeting to Emmanuel (one sentence only, e.g., 'Hello there, Emmanuel! How can I help you today?')."
+                      }
+                    ]
+                  }
+                ],
+                turnComplete: true
+              }
+            };
+            console.log("[GeminiLive] Triggering initial greeting...");
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify(greetingPrompt));
+            }
             
             // Start recording user audio input
             startAudioRecording(stream);
@@ -608,7 +707,10 @@ export default function Assistant() {
 
       ws.onclose = (e) => {
         console.log(`WebSocket closed: Code ${e.code}, Reason: ${e.reason}`);
-        setError(`Call ended. Reason (Code ${e.code}): ${e.reason || "Connection closed."}`);
+        // Do not set error for normal closures (Code 1000 or Code 1005)
+        if (e.code !== 1000 && e.code !== 1005) {
+          setError(`Call ended. Reason (Code ${e.code}): ${e.reason || "Connection closed."}`);
+        }
         stopAll();
       };
 
@@ -619,40 +721,39 @@ export default function Assistant() {
     }
   };
 
-  // Setup Audio Recording worklet
+  // Setup Audio Recording using ScriptProcessorNode for maximum browser compatibility
   const startAudioRecording = async (mediaStream: MediaStream) => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       audioContextRef.current = audioCtx;
 
+      // Ensure AudioContext is running (browsers often suspend it initially)
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+
+      console.log("[GeminiLive] AudioContext state:", audioCtx.state, "Sample rate:", audioCtx.sampleRate);
+
       const source = audioCtx.createMediaStreamSource(mediaStream);
 
-      // Create an inline worklet using Blob URL
-      const workletCode = `
-        class AudioProcessor extends AudioWorkletProcessor {
-          process(inputs, outputs, parameters) {
-            const input = inputs[0];
-            if (input && input[0]) {
-              const channelData = input[0];
-              this.port.postMessage(channelData);
-            }
-            return true;
-          }
-        }
-        registerProcessor('audio-processor', AudioProcessor);
-      `;
-      const blob = new Blob([workletCode], { type: 'application/javascript' });
-      const url = URL.createObjectURL(blob);
+      // Create a ScriptProcessorNode with buffer size 2048, 1 input channel, 1 output channel
+      const scriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
+      audioWorkletNodeRef.current = scriptNode as any;
 
-      await audioCtx.audioWorklet.addModule(url);
-      const audioWorkletNode = new AudioWorkletNode(audioCtx, 'audio-processor');
-      audioWorkletNodeRef.current = audioWorkletNode;
-
-      audioWorkletNode.port.onmessage = (event) => {
-        const float32Data = event.data;
+      let chunkCounter = 0;
+      scriptNode.onaudioprocess = (event) => {
+        const inputBuffer = event.inputBuffer;
+        const float32Data = inputBuffer.getChannelData(0);
         
         // Don't send audio if muted
-        if (muted) return;
+        if (mutedRef.current) return;
+
+        // Calculate Root Mean Square (RMS) to diagnose if the microphone is capturing actual sound
+        let sum = 0;
+        for (let i = 0; i < float32Data.length; i++) {
+          sum += float32Data[i] * float32Data[i];
+        }
+        const rms = Math.sqrt(sum / float32Data.length);
 
         // Downsample Float32Array to 16kHz Int16Array PCM
         const pcm16 = downsampleAndConvertTo16BitPCM(float32Data, audioCtx.sampleRate);
@@ -662,19 +763,21 @@ export default function Assistant() {
           const base64Audio = arrayBufferToBase64(pcm16.buffer);
           wsRef.current.send(JSON.stringify({
             realtimeInput: {
-              mediaChunks: [
-                {
-                  mimeType: "audio/pcm;rate=16000",
-                  data: base64Audio
-                }
-              ]
+              audio: {
+                mimeType: "audio/pcm;rate=16000",
+                data: base64Audio
+              }
             }
           }));
+          chunkCounter++;
+          if (chunkCounter % 100 === 0) {
+            console.log(`[GeminiLive] Sent ${chunkCounter} audio chunks. Volume (RMS): ${rms.toFixed(5)}`);
+          }
         }
       };
 
-      source.connect(audioWorkletNode);
-      audioWorkletNode.connect(audioCtx.destination);
+      source.connect(scriptNode);
+      scriptNode.connect(audioCtx.destination);
     } catch (e) {
       console.error("Audio recording setup failed:", e);
     }
@@ -717,12 +820,10 @@ export default function Assistant() {
           // Send image chunk
           wsRef.current.send(JSON.stringify({
             realtimeInput: {
-              mediaChunks: [
-                {
-                  mimeType: "image/jpeg",
-                  data: base64Jpeg
-                }
-              ]
+              video: {
+                mimeType: "image/jpeg",
+                data: base64Jpeg
+              }
             }
           }));
         }
@@ -838,18 +939,44 @@ export default function Assistant() {
               </div>
             </div>
           ) : (
-            <div className="relative grid place-items-center">
-              {[220, 160, 110].map((s) => (
-                <div
-                  key={s}
-                  className={`absolute rounded-full border border-border/50 transition-all duration-700 ${
-                    status === "speaking" ? "border-emerald-300/40 scale-105" : ""
-                  } ${status === "listening" ? "border-primary/20 scale-102" : ""}`}
-                  style={{ width: s, height: s }}
-                />
-              ))}
-              <div className="relative h-20 w-20 rounded-full bg-white shadow-[0_10px_35px_-8px_rgba(15,23,42,0.1)] grid place-items-center border border-border/60">
-                <div className="h-10 w-10 rounded-full bg-primary/5 grid place-items-center text-primary">
+            <div className="relative flex items-center justify-center h-48 w-full">
+              {/* Bouncing wave behind/under the mic button when active */}
+              {active && (
+                <div className="absolute flex items-center gap-[6px] justify-center h-36 w-full">
+                  {Array.from({ length: 17 }).map((_, i) => {
+                    const delay = `${i * 60}ms`;
+                    const height = status === "speaking" 
+                      ? `${20 + Math.sin(i) * 50 + Math.random() * 30}px`
+                      : status === "listening"
+                      ? `${12 + Math.cos(i) * 25 + Math.random() * 15}px`
+                      : "12px";
+
+                    const barColor = status === "speaking" 
+                      ? "bg-black animate-bounce" 
+                      : status === "listening" 
+                      ? "bg-primary/70 animate-bounce" 
+                      : "bg-muted-foreground/30";
+
+                    return (
+                      <span
+                        key={i}
+                        className={`w-[4px] rounded-full transition-all duration-300 ${barColor}`}
+                        style={{
+                          height: height,
+                          animationDelay: delay,
+                          opacity: muted ? 0.15 : 0.8
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Central Mic Button */}
+              <div className="relative h-20 w-20 rounded-full bg-white shadow-[0_10px_35px_-8px_rgba(15,23,42,0.1)] grid place-items-center border border-border/60 z-10">
+                <div className={`h-10 w-10 rounded-full grid place-items-center transition-all ${
+                  status === "speaking" ? "bg-black/5 text-black" : "bg-primary/5 text-primary"
+                }`}>
                   <Mic className="h-5 w-5" />
                 </div>
               </div>
@@ -863,7 +990,7 @@ export default function Assistant() {
               {status === "listening" && "Listening..."}
               {status === "speaking" && "Speaking..."}
             </p>
-            {renderWaveform()}
+            {/* Wave is now animated in the center behind the mic */}
           </div>
 
           {error && (
