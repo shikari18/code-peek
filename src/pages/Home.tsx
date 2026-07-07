@@ -111,31 +111,31 @@ export default function Home() {
 
         {/* Onboarding Incomplete Banner */}
         {showOnboardingBanner && (
-          <div className="mt-6 p-4 rounded-2xl bg-amber-50 border border-amber-200/60 shadow-[0_4px_16px_-4px_rgba(245,158,11,0.15)]">
+          <div className="mt-6 rounded-2xl bg-white/70 backdrop-blur border border-border/70 p-5 shadow-[0_2px_20px_-8px_rgba(15,23,42,0.08)]">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Setup Incomplete</p>
-                <h3 className="mt-1 font-semibold text-[15px] text-slate-800">Complete your farm profile</h3>
-                <p className="mt-1 text-xs text-amber-850 leading-snug">
+                <p className="eyebrow">Setup Profile</p>
+                <h3 className="mt-2 text-xl font-medium tracking-tight">Complete your farm profile</h3>
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
                   Finish all setup steps to calibrate your AI Fish Doctor recommendations.
                 </p>
               </div>
-              <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-1 rounded-full shrink-0">
+              <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full shrink-0">
                 {completedSteps}/5 steps
               </span>
             </div>
             
             {/* Progress Bar */}
-            <div className="mt-3.5 h-1.5 w-full bg-amber-200/40 rounded-full overflow-hidden">
+            <div className="mt-4 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
               <div 
-                className="h-full bg-amber-500 rounded-full transition-all duration-500" 
+                className="h-full bg-primary rounded-full transition-all duration-500" 
                 style={{ width: `${(completedSteps / 5) * 100}%` }}
               />
             </div>
 
-            <Link href="/onboarding" className="mt-4 flex items-center justify-center gap-1.5 w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold shadow-sm active:scale-95 transition-all">
+            <Link href="/onboarding" className="mt-5 flex items-center justify-center gap-1.5 w-full py-3.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full text-sm font-semibold shadow-md active:scale-95 transition-all">
               <span>Continue Onboarding</span>
-              <ChevronRight className="h-3.5 w-3.5" />
+              <ChevronRight className="h-4 w-4" />
             </Link>
           </div>
         )}
@@ -143,28 +143,14 @@ export default function Home() {
         <div className="mt-7 rounded-2xl bg-white/70 backdrop-blur border border-border/70 p-5 flex items-start gap-4 shadow-[0_2px_20px_-8px_rgba(15,23,42,0.08)]">
           <div className="flex-1">
             <p className="eyebrow">Today</p>
-            {completedSteps < 5 ? (
-              <>
-                <h3 className="mt-2 text-xl font-medium tracking-tight text-amber-800">Setup Incomplete</h3>
-                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                  Complete onboarding to enable weather storm warnings and grow advisories.
-                </p>
-              </>
-            ) : (
-              <>
-                <h3 className="mt-2 text-xl font-medium tracking-tight">Feed before 2PM</h3>
-                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                  Storm expected at 3PM.<br />Market prices increased in Kumasi.
-                </p>
-              </>
-            )}
+            <h3 className="mt-2 text-xl font-medium tracking-tight">Feed before 2PM</h3>
+            <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+              Storm expected at 3PM.<br />Market prices increased in Kumasi.
+            </p>
           </div>
           <button
             aria-label="Play briefing"
-            disabled={completedSteps < 5}
-            className={`h-11 w-11 shrink-0 rounded-full grid place-items-center shadow-lg transition-all ${
-              completedSteps < 5 ? "bg-slate-300 text-slate-500 cursor-not-allowed opacity-60" : "bg-primary text-primary-foreground active:scale-95"
-            }`}
+            className="h-11 w-11 shrink-0 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-lg"
           >
             <Play className="h-4 w-4 ml-0.5" fill="currentColor" />
           </button>
