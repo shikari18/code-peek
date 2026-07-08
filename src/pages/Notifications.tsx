@@ -23,53 +23,18 @@ const iconMap: Record<string, any> = {
   CloudRain, TrendingUp, Pill, Droplet, FileText, Calculator, Bell
 };
 
-// Lightweight PCM player for Gemini audio chunks
-class PCMPlayer {
-  private ctx: AudioContext | null = null;
-  private nextTime = 0;
-  private sources: AudioBufferSourceNode[] = [];
-  readonly rate: number;
-  constructor(rate = 24000) { this.rate = rate; }
-  async init() {
-    if (!this.ctx) this.ctx = new AudioContext({ sampleRate: this.rate });
-    if (this.ctx.state === "suspended") await this.ctx.resume();
-    this.nextTime = this.ctx.currentTime;
-  }
-  playChunk(b64: string) {
-    if (!this.ctx) return;
-    try {
-      const bin = atob(b64); const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      const i16 = new Int16Array(bytes.buffer);
-      const f32 = new Float32Array(i16.length);
-      for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
-      const buf = this.ctx.createBuffer(1, f32.length, this.rate);
-      buf.copyToChannel(f32, 0);
-      const src = this.ctx.createBufferSource();
-      src.buffer = buf; src.connect(this.ctx.destination);
-      const t = Math.max(this.ctx.currentTime, this.nextTime);
-      src.start(t); this.nextTime = t + buf.duration;
-      this.sources.push(src);
-      src.onended = () => { this.sources = this.sources.filter(s => s !== src); };
-    } catch {}
-  }
-  stop() {
-    this.sources.forEach(s => { try { s.stop(); } catch {} });
-    this.sources = [];
-    if (this.ctx) { this.ctx.close(); this.ctx = null; }
-  }
-}
+const GEMINI_MODEL = "models/gemini-3.1-flash-live-preview";
+const ABENA_KEY = "sk_efe453b8d2774a22975cb14de4c4a5b9";
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState<AlertItem[]>([]);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  // Refs for cleanup
-  const abenaCtxRef = useRef<AudioContext | null>(null);
-  const abenaSourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const geminiWsRef = useRef<WebSocket | null>(null);
-  const geminiPlayerRef = useRef<PCMPlayer | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const nextPlayTimeRef = useRef(0);
+  const scheduledSourcesRef = useRef<AudioBufferSourceNode[]>([]);
 
   const loadNotifications = () => {
     const stored = localStorage.getItem("app_notifications");
@@ -92,23 +57,192 @@ export default function Notifications() {
   }, []);
 
   const stopAll = () => {
-    // Stop Abena audio
-    try { abenaSourceRef.current?.stop(); } catch {}
-    abenaSourceRef.current = null;
-    try { abenaCtxRef.current?.close(); } catch {}
-    abenaCtxRef.current = null;
-    // Stop Gemini WS
-    try { geminiWsRef.current?.close(); } catch {}
-    geminiWsRef.current = null;
-    geminiPlayerRef.current?.stop();
-    geminiPlayerRef.current = null;
-    // Stop browser TTS
+    // Close WS
+    try { wsRef.current?.close(); } catch {}
+    wsRef.current = null;
+    // Stop all scheduled audio sources
+    scheduledSourcesRef.current.forEach(s => { try { s.stop(); } catch {} });
+    scheduledSourcesRef.current = [];
+    // Close AudioContext
+    try { audioCtxRef.current?.close(); } catch {}
+    audioCtxRef.current = null;
+    nextPlayTimeRef.current = 0;
+    // Browser TTS
     window.speechSynthesis?.cancel();
     setPlayingId(null);
     setLoadingId(null);
   };
 
-  // ── Abena AI TTS (Twi / Hausa) ──────────────────────────────────────────
+  // ─── Play a base64 PCM/audio chunk via AudioContext ──────────────────────
+  const ensureAudioCtx = async () => {
+    if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+      audioCtxRef.current = new AudioContext({ sampleRate: 24000 });
+      nextPlayTimeRef.current = 0;
+    }
+    if (audioCtxRef.current.state === "suspended") {
+      await audioCtxRef.current.resume();
+    }
+    return audioCtxRef.current;
+  };
+
+  const scheduleChunk = (ctx: AudioContext, b64: string): Promise<void> => {
+    return new Promise(resolve => {
+      try {
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+        // Try to decode as compressed audio (WAV/MP3) first via decodeAudioData
+        const copy = bytes.buffer.slice(0);
+        ctx.decodeAudioData(
+          copy,
+          (decoded) => {
+            const src = ctx.createBufferSource();
+            src.buffer = decoded;
+            src.connect(ctx.destination);
+            const t = Math.max(ctx.currentTime, nextPlayTimeRef.current);
+            src.start(t);
+            nextPlayTimeRef.current = t + decoded.duration;
+            scheduledSourcesRef.current.push(src);
+            src.onended = () => {
+              scheduledSourcesRef.current = scheduledSourcesRef.current.filter(s => s !== src);
+              resolve();
+            };
+          },
+          () => {
+            // Fallback: treat as raw 16-bit PCM at 24kHz mono
+            const i16 = new Int16Array(bytes.buffer);
+            const f32 = new Float32Array(i16.length);
+            for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+            const buf = ctx.createBuffer(1, f32.length, 24000);
+            buf.copyToChannel(f32, 0);
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            src.connect(ctx.destination);
+            const t = Math.max(ctx.currentTime, nextPlayTimeRef.current);
+            src.start(t);
+            nextPlayTimeRef.current = t + buf.duration;
+            scheduledSourcesRef.current.push(src);
+            src.onended = () => {
+              scheduledSourcesRef.current = scheduledSourcesRef.current.filter(s => s !== src);
+              resolve();
+            };
+          }
+        );
+      } catch { resolve(); }
+    });
+  };
+
+  // ─── Gemini Live TTS (English / French) ──────────────────────────────────
+  const playGemini = async (id: string, text: string) => {
+    const apiKey = localStorage.getItem("gemini_live_api_key") || import.meta.env.VITE_GEMINI_API_KEY || "";
+    if (!apiKey) {
+      // No key saved yet - use browser TTS
+      playBrowserTTS(id, text, "en");
+      return;
+    }
+
+    setLoadingId(id);
+
+    const ctx = await ensureAudioCtx();
+    let audioReceived = false;
+    let turnDone = false;
+    let setupDone = false;
+
+    const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    const lang = localStorage.getItem("selected_language") || "en";
+
+    const cleanup = (delay = 0) => {
+      setTimeout(() => {
+        try { ws.close(); } catch {}
+        if (wsRef.current === ws) wsRef.current = null;
+        // Only clear playingId if no more audio is playing
+        if (scheduledSourcesRef.current.length === 0) {
+          setPlayingId(null);
+        }
+      }, delay);
+    };
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        setup: {
+          model: GEMINI_MODEL,
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } }
+            }
+          },
+          systemInstruction: {
+            parts: [{
+              text: lang === "fr"
+                ? "Tu es un assistant vocal. Lis le texte suivant en français clairement."
+                : "You are a voice assistant. Read the following notification text clearly and naturally in English."
+            }]
+          }
+        }
+      }));
+    };
+
+    ws.onmessage = async (event) => {
+      try {
+        const raw = typeof event.data === "string" ? event.data : await (event.data as Blob).text();
+        const msg = JSON.parse(raw);
+
+        // Setup complete → send the text to read
+        if (msg.setupComplete && !setupDone) {
+          setupDone = true;
+          setLoadingId(null);
+          setPlayingId(id);
+          ws.send(JSON.stringify({
+            clientContent: {
+              turns: [{ role: "user", parts: [{ text }] }],
+              turnComplete: true
+            }
+          }));
+        }
+
+        // Audio chunks
+        const parts = msg.serverContent?.modelTurn?.parts ?? [];
+        for (const part of parts) {
+          if (part.inlineData?.data) {
+            audioReceived = true;
+            await scheduleChunk(ctx, part.inlineData.data);
+          }
+        }
+
+        // Turn complete
+        if (msg.serverContent?.turnComplete) {
+          turnDone = true;
+          // Give buffered audio time to finish then close
+          const bufferMs = audioReceived ? 2000 : 500;
+          cleanup(bufferMs);
+        }
+      } catch {}
+    };
+
+    ws.onerror = () => {
+      setLoadingId(null);
+      cleanup();
+      if (!audioReceived) playBrowserTTS(id, text, lang);
+    };
+
+    ws.onclose = () => {
+      if (!setupDone) {
+        // Never got setup → fallback
+        setLoadingId(null);
+        setPlayingId(null);
+      }
+      if (!turnDone && !audioReceived) {
+        setPlayingId(null);
+      }
+    };
+  };
+
+  // ─── Abena AI TTS (Twi / Hausa) ──────────────────────────────────────────
   const playAbena = async (id: string, text: string, voice: string) => {
     setLoadingId(id);
     try {
@@ -116,139 +250,48 @@ export default function Notifications() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-API-Key": "sk_efe453b8d2774a22975cb14de4c4a5b9"
+          "X-API-Key": ABENA_KEY
         },
         body: JSON.stringify({ text, voice })
       });
 
-      if (!res.ok) throw new Error(`Abena ${res.status}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      const b64 = json.audio_base64;
-      if (!b64) throw new Error("No audio_base64");
 
-      // Decode base64 → ArrayBuffer
-      const binStr = atob(b64);
-      const bytes = new Uint8Array(binStr.length);
-      for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+      // The API might return audio_base64 or audio field
+      const b64: string | undefined = json.audio_base64 ?? json.audio ?? json.audioContent;
+      if (!b64) throw new Error(`No audio in response. Keys: ${Object.keys(json).join(", ")}`);
 
-      // Use AudioContext.decodeAudioData (bypasses autoplay policy)
-      const ctx = new AudioContext();
-      abenaCtxRef.current = ctx;
-      const audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
-
-      const src = ctx.createBufferSource();
-      src.buffer = audioBuffer;
-      src.connect(ctx.destination);
-      abenaSourceRef.current = src;
-
-      src.onended = () => {
-        ctx.close().catch(() => {});
-        abenaCtxRef.current = null;
-        abenaSourceRef.current = null;
-        setPlayingId(null);
-      };
-
+      const ctx = await ensureAudioCtx();
       setLoadingId(null);
       setPlayingId(id);
-      src.start(0);
+
+      await scheduleChunk(ctx, b64);
+
+      // Wait for audio to finish
+      const checkDone = setInterval(() => {
+        if (scheduledSourcesRef.current.length === 0) {
+          clearInterval(checkDone);
+          setPlayingId(null);
+        }
+      }, 300);
+
     } catch (e) {
-      console.error("[AbenaAI] TTS failed:", e);
+      console.error("[AbenaAI] failed:", e);
       setLoadingId(null);
       setPlayingId(null);
+      // Fallback to browser TTS with English for any Twi notification
+      playBrowserTTS(id, text, "en");
     }
   };
 
-  // ── Gemini Live TTS (English / French) ──────────────────────────────────
-  const playGemini = async (id: string, text: string, lang: string) => {
-    const apiKey = localStorage.getItem("gemini_live_api_key") || "";
-    if (!apiKey) {
-      // Fallback to browser TTS if no Gemini key
-      playBrowserTTS(id, text, lang);
-      return;
-    }
-
-    setLoadingId(id);
-    try {
-      const player = new PCMPlayer(24000);
-      await player.init();
-      geminiPlayerRef.current = player;
-
-      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
-      const ws = new WebSocket(wsUrl);
-      geminiWsRef.current = ws;
-
-      ws.onopen = () => {
-        const langInstruction = lang === "fr"
-          ? "Respond in French."
-          : "Respond in English.";
-
-        ws.send(JSON.stringify({
-          setup: {
-            model: "models/gemini-live-2.5-flash-preview",
-            generationConfig: {
-              responseModalities: ["AUDIO"],
-              speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } } }
-            },
-            systemInstruction: { parts: [{ text: langInstruction }] }
-          }
-        }));
-      };
-
-      ws.onmessage = async (event) => {
-        try {
-          const raw = typeof event.data === "string" ? event.data : await event.data.text();
-          const msg = JSON.parse(raw);
-
-          if (msg.setupComplete) {
-            setLoadingId(null);
-            setPlayingId(id);
-            // Send the text to speak
-            ws.send(JSON.stringify({
-              clientContent: {
-                turns: [{ role: "user", parts: [{ text: `Read this notification aloud clearly: "${text}"` }] }],
-                turnComplete: true
-              }
-            }));
-          }
-
-          const parts = msg.serverContent?.modelTurn?.parts;
-          if (parts) {
-            for (const part of parts) {
-              if (part.inlineData?.data) player.playChunk(part.inlineData.data);
-            }
-          }
-
-          if (msg.serverContent?.turnComplete) {
-            // Wait for audio to finish then clean up
-            setTimeout(() => {
-              ws.close();
-              geminiWsRef.current = null;
-              geminiPlayerRef.current?.stop();
-              geminiPlayerRef.current = null;
-              setPlayingId(null);
-            }, 1500);
-          }
-        } catch {}
-      };
-
-      ws.onerror = () => {
-        setLoadingId(null);
-        playBrowserTTS(id, text, lang); // fallback
-      };
-      ws.onclose = () => {};
-
-    } catch (e) {
-      console.error("[GeminiTTS] failed:", e);
-      setLoadingId(null);
-      playBrowserTTS(id, text, lang);
-    }
-  };
-
-  // ── Browser TTS fallback ─────────────────────────────────────────────────
+  // ─── Browser TTS fallback ─────────────────────────────────────────────────
   const playBrowserTTS = (id: string, text: string, lang: string) => {
-    if (!("speechSynthesis" in window)) { setPlayingId(null); return; }
+    if (!("speechSynthesis" in window)) { return; }
+    window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = lang === "fr" ? "fr-FR" : "en-US";
+    u.rate = 0.95;
     u.onstart = () => setPlayingId(id);
     u.onend = () => setPlayingId(null);
     u.onerror = () => setPlayingId(null);
@@ -256,13 +299,12 @@ export default function Notifications() {
     setPlayingId(id);
   };
 
-  // ── Main handler ──────────────────────────────────────────────────────────
+  // ─── Main play handler ────────────────────────────────────────────────────
   const handlePlay = (id: string, body: string) => {
     if (playingId === id || loadingId === id) { stopAll(); return; }
     stopAll();
 
     const lang = localStorage.getItem("selected_language") || "en";
-    // Strip any trailing "Click to know more" from body just in case
     const text = body.replace(/\.?\s*Click to know more\.?/gi, "").trim();
 
     if (lang === "tw") {
@@ -270,7 +312,7 @@ export default function Notifications() {
     } else if (lang === "ha") {
       playAbena(id, text, "abubakar");
     } else {
-      playGemini(id, text, lang);
+      playGemini(id, text);
     }
   };
 
@@ -313,17 +355,14 @@ export default function Notifications() {
               const IconComponent = iconMap[it.iconName] || Bell;
               const isPlaying = playingId === it.id;
               const isLoading = loadingId === it.id;
-              // Strip "Click to know more." before displaying
               const displayBody = it.body.replace(/\.?\s*Click to know more\.?/gi, "").trim();
 
               return (
                 <div key={it.id} className="py-4 flex gap-3 items-center">
-                  {/* Icon */}
                   <div className={`h-10 w-10 rounded-full border grid place-items-center shrink-0 ${it.unread ? "bg-primary/5 border-primary/20 text-primary shadow-sm" : "bg-surface border-border/70 text-muted-foreground/80"}`}>
                     <IconComponent className="h-[17px] w-[17px]" strokeWidth={2} />
                   </div>
 
-                  {/* Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <p className={`text-sm font-semibold tracking-tight leading-snug ${it.unread ? "text-slate-950" : "text-slate-700"}`}>
@@ -337,13 +376,14 @@ export default function Notifications() {
                     <p className="text-xs text-muted-foreground leading-relaxed mt-0.5 pr-2">{displayBody}</p>
                   </div>
 
-                  {/* Play / Pause / Loading button */}
                   <button
                     onClick={() => handlePlay(it.id, displayBody)}
                     className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 border transition-all active:scale-90 ${
-                      isPlaying ? "bg-rose-50 border-rose-200 text-rose-600 animate-pulse"
-                      : isLoading ? "bg-amber-50 border-amber-200 text-amber-500"
-                      : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                      isPlaying
+                        ? "bg-rose-50 border-rose-200 text-rose-600 animate-pulse"
+                        : isLoading
+                          ? "bg-amber-50 border-amber-200 text-amber-500"
+                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
                     }`}
                     title={isPlaying ? "Stop" : isLoading ? "Loading…" : "Play voice note"}
                   >
