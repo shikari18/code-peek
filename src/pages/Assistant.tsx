@@ -133,8 +133,16 @@ export default function Assistant() {
     return saved && !saved.startsWith("AQ.") ? saved : "Aoede";
   });
   const [selectedLanguage, setSelectedLanguage] = useState(() => {
-    return localStorage.getItem("gemini_live_language") || "en-US";
+    return localStorage.getItem("selected_language") || "en";
   });
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setSelectedLanguage(localStorage.getItem("selected_language") || "en");
+    };
+    window.addEventListener("language_changed", handleUpdate);
+    return () => window.removeEventListener("language_changed", handleUpdate);
+  }, []);
 
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
@@ -168,6 +176,8 @@ export default function Assistant() {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const textAccumulatorRef = useRef("");
+  const assistantAudioRef = useRef<HTMLAudioElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const pcmPlayerRef = useRef<PCMPlayer | null>(null);
@@ -472,6 +482,13 @@ export default function Assistant() {
       wsRef.current = null;
     }
 
+    // Stop Twi voice playbacks
+    if (assistantAudioRef.current) {
+      assistantAudioRef.current.pause();
+      assistantAudioRef.current = null;
+    }
+    textAccumulatorRef.current = "";
+
     setStatus("idle");
     setActive(false);
   };
@@ -549,18 +566,34 @@ export default function Assistant() {
 You know exactly what page the user is on (they are on the AI voice call assistant page, which is a subpage of the farm dashboard). You have full visibility of all active alerts and listings. Answer questions directly using this context without saying you are calling a tool unless you need fresh/updated telemetry.
 `;
 
+        const lang = localStorage.getItem("selected_language") || "en";
+        const useTwi = lang === "tw";
+        const useFrench = lang === "fr";
+        const useHausa = lang === "ha";
+        
+        let languageInstruction = "";
+        if (useTwi) {
+          languageInstruction = "\n\nCRITICAL LANGUAGE INSTRUCTION: The user wants to communicate in Twi. You MUST output your responses in written Twi text only (Ghanaian Twi language). Do NOT generate audio output. Keep your sentences short and grammatically correct in Twi so they can be synthesized easily.";
+        } else if (useFrench) {
+          languageInstruction = "\n\nCRITICAL LANGUAGE INSTRUCTION: The user wants to communicate in French. You MUST output your responses in French audio/text.";
+        } else if (useHausa) {
+          languageInstruction = "\n\nCRITICAL LANGUAGE INSTRUCTION: The user wants to communicate in Hausa. You MUST output your responses in Hausa audio/text.";
+        } else {
+          languageInstruction = "\n\nCRITICAL LANGUAGE INSTRUCTION: The user wants to communicate in English. Speak in English.";
+        }
+
         // Send setup message
         const setupMessage = {
           setup: {
             model: FIXED_MODEL,
             generationConfig: {
-              responseModalities: ["AUDIO"],
+              responseModalities: useTwi ? ["TEXT"] : ["AUDIO"],
               speechConfig: {
                 voiceConfig: voiceConfigObj,
               },
             },
             systemInstruction: {
-              parts: [{ text: SYSTEM_PROMPT + "\n" + dynamicContext }],
+              parts: [{ text: SYSTEM_PROMPT + languageInstruction + "\n" + dynamicContext }],
             },
             realtimeInputConfig: {
               automaticActivityDetection: {
@@ -673,6 +706,28 @@ You know exactly what page the user is on (they are on the AI voice call assista
             setStatus("speaking");
 
             // Trigger an immediate short greeting turn from the AI (acknowledging camera if active)
+            const lang = localStorage.getItem("selected_language") || "en";
+            const useTwi = lang === "tw";
+            const useFrench = lang === "fr";
+            const useHausa = lang === "ha";
+            
+            let greetingText = "";
+            if (useTwi) {
+              greetingText = "GREETING INSTRUCTION: Respond ONLY in written Twi text. Please give a very short, warm greeting to Emmanuel in Twi (e.g. 'Mepa wo kyɛw Emmanuel, mehu wo camera feed no. Mepa wo kyɛw, ɛdeɛn na metumi aboa wo nnɛ?').";
+            } else if (useFrench) {
+              greetingText = useVideo 
+                ? "Bonjour! S'il vous plaît donnez une salutation très courte et chaleureuse à Emmanuel, en reconnaissant que vous pouvez voir son flux de caméra maintenant (une phrase seulement)."
+                : "Bonjour! S'il vous plaît donnez une salutation très courte et chaleureuse à Emmanuel (une phrase seulement).";
+            } else if (useHausa) {
+              greetingText = useVideo
+                ? "Sannu! Da fatan za a ba Emmanuel gaisuwa mai gajeru da dumi, tare da tabbatar da cewa za ku iya ganin bidiyonsa yanzu (hukunci ɗaya kawai)."
+                : "Sannu! Da fatan za a ba Emmanuel gaisuwa mai gajeru da dumi (hukunci ɗaya kawai).";
+            } else {
+              greetingText = useVideo
+                ? "Hello! Please give a very short, warm greeting to Emmanuel, acknowledging that you can see his camera feed now (one sentence only, e.g., 'Hello there, Emmanuel! I can see your camera feed now. How can I help you today?')."
+                : "Hello! Please give a very short, warm greeting to Emmanuel (one sentence only, e.g., 'Hello there, Emmanuel! How can I help you today?').";
+            }
+
             const greetingPrompt = {
               clientContent: {
                 turns: [
@@ -680,9 +735,7 @@ You know exactly what page the user is on (they are on the AI voice call assista
                     role: "user",
                     parts: [
                       {
-                        text: useVideo 
-                          ? "Hello! Please give a very short, warm greeting to Emmanuel, acknowledging that you can see his camera feed now (one sentence only, e.g., 'Hello there, Emmanuel! I can see your camera feed now. How can I help you today?')."
-                          : "Hello! Please give a very short, warm greeting to Emmanuel (one sentence only, e.g., 'Hello there, Emmanuel! How can I help you today?')."
+                        text: greetingText
                       }
                     ]
                   }
@@ -704,9 +757,10 @@ You know exactly what page the user is on (they are on the AI voice call assista
             }
           }
 
-          // Handle Server Generated Content (Audio chunks)
+          // Handle Server Generated Content (Audio chunks or Twi text)
           if (message.serverContent) {
             const { modelTurn, turnComplete } = message.serverContent;
+            const lang = localStorage.getItem("selected_language") || "en";
             
             if (modelTurn && modelTurn.parts) {
               setStatus("speaking");
@@ -714,11 +768,53 @@ You know exactly what page the user is on (they are on the AI voice call assista
                 if (part.inlineData && part.inlineData.data) {
                   pcmPlayerRef.current?.playChunk(part.inlineData.data);
                 }
+                if (part.text) {
+                  textAccumulatorRef.current += part.text;
+                }
               });
             }
 
             if (turnComplete) {
-              setStatus("listening");
+              if (lang === "tw" && textAccumulatorRef.current.trim()) {
+                const textToSpeak = textAccumulatorRef.current;
+                textAccumulatorRef.current = ""; // Reset
+                
+                (async () => {
+                  try {
+                    console.log("[GeminiLive] Synthesizing Twi response:", textToSpeak);
+                    const response = await fetch("https://abena.mobobi.com/playground/api/v1/tts/synthesize/", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "X-API-Key": "sk_efe453b8d2774a22975cb14de4c4a5b9"
+                      },
+                      body: JSON.stringify({
+                        text: textToSpeak,
+                        voice: "abena_twi"
+                      })
+                    });
+                    if (!response.ok) throw new Error("Abena AI Synthesis failed");
+                    
+                    const blob = await response.blob();
+                    const audioUrl = URL.createObjectURL(blob);
+                    
+                    const audio = new Audio(audioUrl);
+                    assistantAudioRef.current = audio;
+                    audio.onended = () => {
+                      setStatus("listening");
+                    };
+                    audio.onerror = () => {
+                      setStatus("listening");
+                    };
+                    await audio.play();
+                  } catch (e) {
+                    console.error("Failed to play Twi synthesis:", e);
+                    setStatus("listening");
+                  }
+                })();
+              } else {
+                setStatus("listening");
+              }
             }
           }
 

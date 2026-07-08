@@ -51,7 +51,11 @@ export default function Welcome() {
 
         <div className="mt-auto pt-10">
           <button
-            onClick={() => navigate("/signin")}
+            onClick={() => {
+              localStorage.setItem("selected_language", selected);
+              window.dispatchEvent(new Event("language_changed"));
+              navigate("/signin");
+            }}
             className="w-full py-4 rounded-full bg-primary text-primary-foreground font-medium flex items-center justify-center gap-2 shadow-lg"
           >
             Continue <ArrowRight className="h-4 w-4" />
