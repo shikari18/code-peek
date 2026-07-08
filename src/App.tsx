@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { AnimatePresence } from "framer-motion";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -18,6 +19,7 @@ import CommunityBuying from "@/pages/CommunityBuying";
 import HarvestMarketplace from "@/pages/HarvestMarketplace";
 import CreditScore from "@/pages/CreditScore";
 import PondDevice from "@/pages/PondDevice";
+import FarmerChat from "@/pages/FarmerChat";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -37,6 +39,81 @@ function wrap(Component: React.ComponentType) {
 function AppShell() {
   const [location] = useLocation();
   const showNav = !NO_NAV_ROUTES.has(location);
+
+  useEffect(() => {
+    // Request notification permission on startup
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+
+    // Schedule background simulated alerts (rain warning, feeding reminder, oxygen levels)
+    const alertsPool = [
+      { 
+        icon: "CloudRain", 
+        title: "Rain arriving in 1 hour", 
+        body: "Rain lowers water temperature and oxygen. Reduce feeding by 50% for Pond 1.",
+        time: "Just now" 
+      },
+      { 
+        icon: "Droplet", 
+        title: "Oxygen Drop Alert", 
+        body: "Pond 2 sensor reading is at 3.9 mg/L. Turn on aerators immediately.",
+        time: "Just now" 
+      },
+      { 
+        icon: "TrendingUp", 
+        title: "Market Price Alert", 
+        body: "Tilapia wholesale prices in Accra increased by 12% today.",
+        time: "Just now" 
+      },
+      { 
+        icon: "Calculator", 
+        title: "Feeding Time", 
+        body: "Schedule calculation complete: Feed 3 bags of 2mm pellets to Pond 3.",
+        time: "Just now" 
+      }
+    ];
+
+    let currentAlertIndex = 0;
+
+    const interval = setInterval(() => {
+      // Pick next alert from the pool
+      const alert = alertsPool[currentAlertIndex];
+      currentAlertIndex = (currentAlertIndex + 1) % alertsPool.length;
+
+      // Add to local storage
+      const stored = localStorage.getItem("app_notifications");
+      const currentNotifications = stored ? JSON.parse(stored) : [];
+      
+      const newNotification = {
+        id: Math.random().toString(),
+        iconName: alert.icon,
+        title: alert.title,
+        body: alert.body,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        unread: true
+      };
+
+      localStorage.setItem("app_notifications", JSON.stringify([newNotification, ...currentNotifications]));
+      
+      // Dispatch custom event to let components know notifications updated in real-time
+      window.dispatchEvent(new Event("notifications_updated"));
+
+      // Trigger standard browser push notification if permitted
+      if ("Notification" in window && Notification.permission === "granted") {
+        try {
+          new Notification(alert.title, {
+            body: alert.body,
+            icon: "/favicon.ico"
+          });
+        } catch (e) {
+          console.warn("Push notification failed to fire:", e);
+        }
+      }
+    }, 45000); // Send an alert every 45 seconds for testing/demo purposes
+
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="h-screen w-full flex justify-center overflow-hidden">
@@ -59,6 +136,7 @@ function AppShell() {
             <Route path="/harvest-marketplace" component={wrap(HarvestMarketplace)} />
             <Route path="/credit-score" component={wrap(CreditScore)} />
             <Route path="/pond-device" component={wrap(PondDevice)} />
+            <Route path="/farmer-chat" component={wrap(FarmerChat)} />
             <Route component={wrap(NotFound)} />
           </Switch>
         </AnimatePresence>

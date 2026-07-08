@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { PhoneShell } from "@/components/PhoneShell";
-import { Play, Calculator, Stethoscope, TrendingUp, Bell, ChevronRight, Users, ShoppingCart, BarChart2, Wifi } from "lucide-react";
+import { Play, Calculator, Stethoscope, TrendingUp, Bell, ChevronRight, Users, ShoppingCart, BarChart2, Wifi, MessageSquare } from "lucide-react";
 import stormImg from "@/assets/weather-storm.jpg";
 import sunshineImg from "@/assets/weather-sunshine.jpg";
 import nightImg from "@/assets/weather-night.jpg";
@@ -67,6 +67,7 @@ const quickAccess = [
   { to: "/harvest-marketplace", icon: ShoppingCart, title: "Harvest Marketplace", sub: "Sell directly to buyers" },
   { to: "/credit-score", icon: BarChart2, title: "Fish Credit Score", sub: "Unlock farm financing" },
   { to: "/pond-device", icon: Wifi, title: "Pond Device", sub: "Live sensor readings" },
+  { to: "/farmer-chat", icon: MessageSquare, title: "Farmer Chat Room", sub: "Chat with all farmers live" },
 ] as const;
 
 export default function Home() {

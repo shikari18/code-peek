@@ -145,7 +145,7 @@ export default function Assistant() {
   const [status, setStatus] = useState<"idle" | "connecting" | "listening" | "speaking">("idle");
   const [videoOn, setVideoOn] = useState(false);
   const [muted, setMuted] = useState(false);
-  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
 
   // Ref to hold the current muted state to avoid stale closure issues in the audio worklet
   const mutedRef = useRef(muted);
@@ -485,7 +485,7 @@ export default function Assistant() {
       // 1. Request microphone and camera permissions
       const constraints: MediaStreamConstraints = {
         audio: true,
-        video: useVideo ? { width: { ideal: 480 }, height: { ideal: 480 }, facingMode: "user" } : false,
+        video: useVideo ? { width: { ideal: 640 }, height: { ideal: 640 }, facingMode: { ideal: facingMode } } : false,
       };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -895,27 +895,29 @@ You know exactly what page the user is on (they are on the AI voice call assista
       const newFacingMode = facingMode === "user" ? "environment" : "user";
       setFacingMode(newFacingMode);
       
-      // Stop current video track
-      const currentVideoTrack = streamRef.current.getVideoTracks()[0];
-      if (currentVideoTrack) {
-        currentVideoTrack.stop();
-        streamRef.current.removeTrack(currentVideoTrack);
-      }
-      
-      // Request new camera feed with new facingMode
+      // Request new camera feed with new facingMode (using ideal to prevent black screen failures)
       const newCameraStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 480 }, height: { ideal: 480 }, facingMode: newFacingMode }
+        video: { width: { ideal: 640 }, height: { ideal: 640 }, facingMode: { ideal: newFacingMode } }
       });
       
+      // Stop old video tracks
+      streamRef.current.getVideoTracks().forEach(track => {
+        track.stop();
+        streamRef.current?.removeTrack(track);
+      });
+      
+      // Add the new video track to our main stream reference
       const newVideoTrack = newCameraStream.getVideoTracks()[0];
       if (newVideoTrack) {
         streamRef.current.addTrack(newVideoTrack);
-        
-        // Re-attach to video element
-        if (videoRef.current) {
-          videoRef.current.srcObject = streamRef.current;
-        }
       }
+      
+      // Set the video element srcObject to the new stream directly to force update
+      if (videoRef.current) {
+        videoRef.current.srcObject = newCameraStream;
+        videoRef.current.play().catch(() => {});
+      }
+      
       console.log(`[GeminiLive] Camera flipped to ${newFacingMode}`);
     } catch (e) {
       console.error("Failed to flip camera:", e);
@@ -984,7 +986,7 @@ You know exactly what page the user is on (they are on the AI voice call assista
 
   if (videoOn && active) {
     return (
-      <PhoneShell>
+      <PhoneShell showTopBar={false}>
         <div className="relative w-full h-full bg-black overflow-hidden flex flex-col justify-between">
           {/* Fullscreen Video Preview */}
           <video

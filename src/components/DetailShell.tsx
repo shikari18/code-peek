@@ -27,11 +27,29 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   );
 }
 
-export function Select({ value }: { value: string }) {
+export function Select({ 
+  value, 
+  onChange, 
+  options = [] 
+}: { 
+  value: string; 
+  onChange?: (val: string) => void; 
+  options?: string[];
+}) {
   return (
-    <div className="w-full rounded-xl border border-border bg-white px-4 py-3.5 flex items-center justify-between text-sm">
-      <span>{value}</span>
-      <span className="text-muted-foreground">▾</span>
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange?.(e.target.value)}
+        className="w-full rounded-xl border border-border bg-white px-4 py-3.5 text-sm appearance-none outline-none focus:border-primary cursor-pointer pr-10 font-medium"
+      >
+        {options.map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
+        ))}
+      </select>
+      <span className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground text-[10px]">▼</span>
     </div>
   );
 }
