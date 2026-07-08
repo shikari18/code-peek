@@ -24,6 +24,7 @@ const iconMap: Record<string, any> = {
 };
 
 const GEMINI_MODEL = "models/gemini-3.1-flash-live-preview";
+const ABENA_API = "https://abena.mobobi.com/playground/api/v1/tts/synthesize/";
 const ABENA_KEY = "sk_efe453b8d2774a22975cb14de4c4a5b9";
 
 export default function Notifications() {
@@ -246,42 +247,64 @@ export default function Notifications() {
   const playAbena = async (id: string, text: string, voice: string) => {
     setLoadingId(id);
     try {
-      const res = await fetch("https://abena.mobobi.com/playground/api/v1/tts/synthesize/", {
+      // Abena free tier — no auth required, just POST JSON body
+      const res = await fetch(ABENA_API, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${ABENA_KEY}`
-        },
-        body: JSON.stringify({ text, voice })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice, speed: 1.0 })
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
 
-      // The API might return audio_base64 or audio field
-      const b64: string | undefined = json.audio_base64 ?? json.audio ?? json.audioContent;
-      if (!b64) throw new Error(`No audio in response. Keys: ${Object.keys(json).join(", ")}`);
+      const contentType = res.headers.get("content-type") || "";
+      let audioBuffer: ArrayBuffer;
+
+      if (contentType.includes("application/json")) {
+        // Some responses wrap audio in JSON as audio_base64
+        const json = await res.json();
+        const b64: string = json.audio_base64 ?? json.audio ?? json.audioContent ?? "";
+        if (!b64) throw new Error(`No audio in JSON. Keys: ${Object.keys(json).join(", ")}`);
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        audioBuffer = bytes.buffer;
+      } else {
+        // Direct binary audio response (wav/mp3/ogg)
+        audioBuffer = await res.arrayBuffer();
+      }
 
       const ctx = await ensureAudioCtx();
       setLoadingId(null);
       setPlayingId(id);
 
-      await scheduleChunk(ctx, b64);
+      // Try decodeAudioData first (handles WAV/MP3/OGG), then raw PCM fallback
+      const playBuffer = (buf: AudioBuffer) => {
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        src.onended = () => setPlayingId(null);
+        src.start(0);
+        scheduledSourcesRef.current.push(src);
+      };
 
-      // Wait for audio to finish
-      const checkDone = setInterval(() => {
-        if (scheduledSourcesRef.current.length === 0) {
-          clearInterval(checkDone);
-          setPlayingId(null);
+      ctx.decodeAudioData(
+        audioBuffer,
+        playBuffer,
+        () => {
+          // Fallback: raw 16-bit PCM at 24kHz
+          const i16 = new Int16Array(audioBuffer);
+          const f32 = new Float32Array(i16.length);
+          for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+          const buf = ctx.createBuffer(1, f32.length, 24000);
+          buf.copyToChannel(f32, 0);
+          playBuffer(buf);
         }
-      }, 300);
+      );
 
     } catch (e) {
       console.error("[AbenaAI] failed:", e);
       setLoadingId(null);
       setPlayingId(null);
-      // Fallback to browser TTS with English for any Twi notification
-      playBrowserTTS(id, text, "en");
     }
   };
 
@@ -308,7 +331,7 @@ export default function Notifications() {
     const text = body.replace(/\.?\s*Click to know more\.?/gi, "").trim();
 
     if (lang === "tw") {
-      playAbena(id, text, "abena_high");
+      playAbena(id, text, "abena_twi");   // Abena High — Twi (Akan)
     } else if (lang === "ha") {
       playAbena(id, text, "abubakar");
     } else {
