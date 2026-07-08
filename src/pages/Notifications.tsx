@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { PhoneShell } from "@/components/PhoneShell";
 import { CloudRain, TrendingUp, Pill, Droplet, FileText, Bell, Calculator, Play, Pause } from "lucide-react";
 
@@ -29,9 +29,87 @@ const iconMap: Record<string, any> = {
   Bell
 };
 
+// PCM Player class to schedule and play 24kHz raw audio chunks from Gemini Live
+class PCMPlayer {
+  private audioCtx: AudioContext | null = null;
+  private nextPlayTime = 0;
+  private activeSources: AudioBufferSourceNode[] = [];
+  private sampleRate: number;
+
+  constructor(sampleRate = 24000) {
+    this.sampleRate = sampleRate;
+  }
+
+  async init() {
+    if (!this.audioCtx) {
+      this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: this.sampleRate });
+    }
+    if (this.audioCtx.state === 'suspended') {
+      await this.audioCtx.resume();
+    }
+    this.nextPlayTime = this.audioCtx.currentTime;
+  }
+
+  playChunk(base64Data: string) {
+    if (!this.audioCtx) {
+      this.init();
+      return;
+    }
+    if (this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume();
+    }
+
+    try {
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const int16 = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(int16.length);
+      for (let i = 0; i < int16.length; i++) {
+        float32[i] = int16[i] / 32768;
+      }
+
+      const buffer = this.audioCtx.createBuffer(1, float32.length, this.sampleRate);
+      buffer.copyToChannel(float32, 0);
+
+      const source = this.audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(this.audioCtx.destination);
+
+      const startTime = Math.max(this.audioCtx.currentTime, this.nextPlayTime);
+      source.start(startTime);
+      this.nextPlayTime = startTime + buffer.duration;
+
+      this.activeSources.push(source);
+      source.onended = () => {
+        this.activeSources = this.activeSources.filter(s => s !== source);
+      };
+    } catch (e) {
+      console.error("PCM Playback error:", e);
+    }
+  }
+
+  stop() {
+    this.activeSources.forEach(s => {
+      try { s.stop(); } catch(e) {}
+    });
+    this.activeSources = [];
+    if (this.audioCtx) {
+      this.nextPlayTime = this.audioCtx.currentTime;
+    }
+  }
+}
+
 export default function Notifications() {
   const [notifications, setNotifications] = useState<AlertItem[]>([]);
   const [playingId, setPlayingId] = useState<string | null>(null);
+
+  // References for WebSocket and Player
+  const wsRef = useRef<WebSocket | null>(null);
+  const pcmPlayerRef = useRef<PCMPlayer | null>(null);
 
   const loadNotifications = () => {
     const stored = localStorage.getItem("app_notifications");
@@ -54,26 +132,162 @@ export default function Notifications() {
     window.addEventListener("notifications_updated", loadNotifications);
     return () => {
       window.removeEventListener("notifications_updated", loadNotifications);
-      window.speechSynthesis.cancel();
+      stopGeminiSpeech();
     };
   }, []);
 
-  const playVoiceNote = (id: string, text: string) => {
+  const stopGeminiSpeech = () => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    if (pcmPlayerRef.current) {
+      pcmPlayerRef.current.stop();
+    }
+    window.speechSynthesis.cancel(); // also clear legacy tts fallback
+    setPlayingId(null);
+  };
+
+  const playVoiceNote = async (id: string, text: string) => {
+    // If already playing this ID, stop it
     if (playingId === id) {
-      window.speechSynthesis.cancel();
-      setPlayingId(null);
+      stopGeminiSpeech();
       return;
     }
-    
-    window.speechSynthesis.cancel();
-    // Strip "Click to know more." from spoken text for natural reading
-    const cleanText = text.replace(/Click to know more\./gi, "").trim();
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.onend = () => setPlayingId(null);
-    utterance.onerror = () => setPlayingId(null);
-    
+
+    // Stop any existing playing audio
+    stopGeminiSpeech();
     setPlayingId(id);
-    window.speechSynthesis.speak(utterance);
+
+    // Retrieve Gemini API Key from localStorage or env override
+    const apiKey = localStorage.getItem("gemini_live_api_key") || import.meta.env.VITE_GEMINI_API_KEY || "";
+    
+    // Fallback: If no API key is present, use standard Web Speech TTS
+    if (!apiKey) {
+      console.warn("[GeminiSpeech] No API key found. Falling back to native browser TTS.");
+      const cleanText = text.replace(/Click to know more\./gi, "").trim();
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.onend = () => setPlayingId(null);
+      utterance.onerror = () => setPlayingId(null);
+      window.speechSynthesis.speak(utterance);
+      return;
+    }
+
+    try {
+      // Initialize PCM Player for 24kHz raw audio chunks
+      if (!pcmPlayerRef.current) {
+        pcmPlayerRef.current = new PCMPlayer(24000);
+      }
+      await pcmPlayerRef.current.init();
+
+      // Open Live WebSocket
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        // Send setup frame
+        const setupMessage = {
+          setup: {
+            model: "models/gemini-3.1-flash-live-preview",
+            generationConfig: {
+              responseModalities: ["AUDIO"],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: {
+                    voiceName: "Aoede" // Realistic Aoede voice
+                  }
+                }
+              }
+            }
+          }
+        };
+        ws.send(JSON.stringify(setupMessage));
+      };
+
+      ws.onmessage = async (event) => {
+        try {
+          let rawData = "";
+          if (typeof event.data === "string") {
+            rawData = event.data;
+          } else {
+            rawData = await event.data.text();
+          }
+
+          const response = JSON.parse(rawData);
+
+          // Handle incoming audio data chunks
+          const parts = response.serverContent?.modelTurn?.parts;
+          if (parts) {
+            for (const part of parts) {
+              if (part.inlineData && part.inlineData.mimeType?.startsWith("audio/pcm")) {
+                pcmPlayerRef.current?.playChunk(part.inlineData.data);
+              }
+            }
+          }
+
+          // If turn is complete, close connection gracefully after audio finishes scheduling
+          if (response.serverContent?.turnComplete) {
+            console.log("[GeminiSpeech] Model finished speaking.");
+            setTimeout(() => {
+              // Only reset playing state if we are still the active playing notification
+              setPlayingId(current => current === id ? null : current);
+            }, 1000);
+          }
+        } catch (e) {
+          console.error("[GeminiSpeech] Error parsing server content:", e);
+        }
+      };
+
+      ws.onclose = () => {
+        console.log("[GeminiSpeech] WebSocket closed.");
+      };
+
+      ws.onerror = (err) => {
+        console.error("[GeminiSpeech] WebSocket error, falling back to TTS:", err);
+        // Fallback to TTS on socket error
+        const cleanText = text.replace(/Click to know more\./gi, "").trim();
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.onend = () => setPlayingId(null);
+        utterance.onerror = () => setPlayingId(null);
+        window.speechSynthesis.speak(utterance);
+      };
+
+      // Send greeting content asking model to read notification word-for-word
+      const cleanText = text.replace(/Click to know more\./gi, "").trim();
+      const textPrompt = `Read the following warning message out loud word-for-word in your natural, realistic voice. Do not add any greeting or commentary, just read the text exactly as written: "${cleanText}"`;
+
+      // Wait a moment for connection setup before sending content turn
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          const contentMessage = {
+            clientContent: {
+              turns: [
+                {
+                  role: "user",
+                  parts: [
+                    {
+                      text: textPrompt
+                    }
+                  ]
+                }
+              ],
+              turnComplete: true
+            }
+          };
+          ws.send(JSON.stringify(contentMessage));
+        }
+      }, 500);
+
+    } catch (e) {
+      console.error("[GeminiSpeech] Failed to initialize Gemini Live speech:", e);
+      // Fallback
+      const cleanText = text.replace(/Click to know more\./gi, "").trim();
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.onend = () => setPlayingId(null);
+      utterance.onerror = () => setPlayingId(null);
+      window.speechSynthesis.speak(utterance);
+    }
   };
 
   const handleMarkAllRead = () => {
