@@ -24,8 +24,6 @@ const iconMap: Record<string, any> = {
 };
 
 const GEMINI_MODEL = "models/gemini-3.1-flash-live-preview";
-const ABENA_API = "https://abena.mobobi.com/playground/api/v1/tts/synthesize/";
-const ABENA_KEY = "sk_efe453b8d2774a22975cb14de4c4a5b9";
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState<AlertItem[]>([]);
@@ -247,60 +245,60 @@ export default function Notifications() {
   const playAbena = async (id: string, text: string, voice: string) => {
     setLoadingId(id);
     try {
-      // Abena free tier — no auth required, just POST JSON body
-      const res = await fetch(ABENA_API, {
+      // In dev: Vite proxy handles /api/abena-tts → Abena (no CORS)
+      // In production: use corsproxy.io to bypass CORS
+      const ABENA_ENDPOINT = "https://abena.mobobi.com/playground/api/v1/tts/synthesize/";
+      const isDev = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      const url = isDev
+        ? "/api/abena-tts/"
+        : `https://corsproxy.io/?url=${encodeURIComponent(ABENA_ENDPOINT)}`;
+
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice, speed: 1.0 })
+        body: JSON.stringify({ text, voice, speed: 1.0 }),
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new Error(`TTS error ${res.status}: ${await res.text()}`);
 
-      const contentType = res.headers.get("content-type") || "";
-      let audioBuffer: ArrayBuffer;
-
-      if (contentType.includes("application/json")) {
-        // Some responses wrap audio in JSON as audio_base64
-        const json = await res.json();
-        const b64: string = json.audio_base64 ?? json.audio ?? json.audioContent ?? "";
-        if (!b64) throw new Error(`No audio in JSON. Keys: ${Object.keys(json).join(", ")}`);
-        const bin = atob(b64);
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        audioBuffer = bytes.buffer;
-      } else {
-        // Direct binary audio response (wav/mp3/ogg)
-        audioBuffer = await res.arrayBuffer();
-      }
+      const audioData = await res.arrayBuffer();
+      if (audioData.byteLength === 0) throw new Error("Empty audio response");
 
       const ctx = await ensureAudioCtx();
       setLoadingId(null);
       setPlayingId(id);
 
-      // Try decodeAudioData first (handles WAV/MP3/OGG), then raw PCM fallback
-      const playBuffer = (buf: AudioBuffer) => {
-        const src = ctx.createBufferSource();
-        src.buffer = buf;
-        src.connect(ctx.destination);
-        src.onended = () => setPlayingId(null);
-        src.start(0);
-        scheduledSourcesRef.current.push(src);
-      };
-
       ctx.decodeAudioData(
-        audioBuffer,
-        playBuffer,
+        audioData,
+        (decoded) => {
+          const src = ctx.createBufferSource();
+          src.buffer = decoded;
+          src.connect(ctx.destination);
+          src.onended = () => {
+            scheduledSourcesRef.current = scheduledSourcesRef.current.filter(s => s !== src);
+            setPlayingId(null);
+          };
+          src.start(0);
+          scheduledSourcesRef.current.push(src);
+        },
         () => {
-          // Fallback: raw 16-bit PCM at 24kHz
-          const i16 = new Int16Array(audioBuffer);
+          // Raw 16-bit PCM fallback at 24kHz
+          const i16 = new Int16Array(audioData);
           const f32 = new Float32Array(i16.length);
           for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
           const buf = ctx.createBuffer(1, f32.length, 24000);
           buf.copyToChannel(f32, 0);
-          playBuffer(buf);
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.connect(ctx.destination);
+          src.onended = () => {
+            scheduledSourcesRef.current = scheduledSourcesRef.current.filter(s => s !== src);
+            setPlayingId(null);
+          };
+          src.start(0);
+          scheduledSourcesRef.current.push(src);
         }
       );
-
     } catch (e) {
       console.error("[AbenaAI] failed:", e);
       setLoadingId(null);

@@ -16,5 +16,17 @@ export default defineConfig({
     preview: {
       allowedHosts: true,
     },
+    server: {
+      proxy: {
+        // In development: proxy /api/abena-tts → Abena (avoids CORS)
+        "/api/abena-tts": {
+          target: "https://abena.mobobi.com",
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/abena-tts/, "/playground/api/v1/tts/synthesize"),
+          secure: true,
+        },
+      },
+    },
   },
 });
+
