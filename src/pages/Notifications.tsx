@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { PhoneShell } from "@/components/PhoneShell";
 import { CloudRain, TrendingUp, Pill, Droplet, FileText, Bell, Calculator, Play, Pause, Loader } from "lucide-react";
+import { createServerFn } from "@tanstack/react-start";
 
 type AlertItem = {
   id: string;
@@ -24,6 +25,33 @@ const iconMap: Record<string, any> = {
 };
 
 const GEMINI_MODEL = "models/gemini-3.1-flash-live-preview";
+
+const fetchAbenaTTS = createServerFn({ method: "POST" })
+  .validator((d: { text: string; voice: string }) => d)
+  .handler(async ({ data }) => {
+    "use server";
+    const ABENA_KEY = "sk_efe453b8d2774a22975cb14de4c4a5b9";
+    const ABENA_ENDPOINT = `https://abena.mobobi.com/playground/api/v1/tts/synthesize/?api_key=${ABENA_KEY}`;
+    
+    console.log("[ServerFn] Fetching Abena TTS server-side for text:", data.text, "voice:", data.voice);
+    
+    const res = await fetch(ABENA_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${ABENA_KEY}`
+      },
+      body: JSON.stringify({ text: data.text, voice: data.voice, speed: 1.0 }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("[ServerFn] Abena API error:", res.status, errText);
+      throw new Error(`Abena AI returned status ${res.status}: ${errText}`);
+    }
+
+    return await res.json();
+  });
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState<AlertItem[]>([]);
@@ -245,24 +273,20 @@ export default function Notifications() {
   const playAbena = async (id: string, text: string, voice: string) => {
     setLoadingId(id);
     try {
-      // In dev: Vite proxy handles /api/abena-tts → Abena (no CORS)
-      // In production: use corsproxy.io to bypass CORS
-      const ABENA_ENDPOINT = "https://abena.mobobi.com/playground/api/v1/tts/synthesize/";
-      const isDev = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-      const url = isDev
-        ? "/api/abena-tts/"
-        : `https://corsproxy.io/?url=${encodeURIComponent(ABENA_ENDPOINT)}`;
+      console.log("[AbenaAI] Requesting server-side TTS proxy...");
+      const data = await fetchAbenaTTS({ data: { text, voice } });
+      console.log("[AbenaAI] Server response received. Keys:", Object.keys(data));
 
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice, speed: 1.0 }),
-      });
+      const b64 = data.audio_base64 || data.audio || data.audioContent;
+      if (!b64) throw new Error("No audio_base64 in Abena response JSON");
 
-      if (!res.ok) throw new Error(`TTS error ${res.status}: ${await res.text()}`);
-
-      const audioData = await res.arrayBuffer();
-      if (audioData.byteLength === 0) throw new Error("Empty audio response");
+      // Decode base64 string to ArrayBuffer
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) {
+        bytes[i] = bin.charCodeAt(i);
+      }
+      const audioData = bytes.buffer;
 
       const ctx = await ensureAudioCtx();
       setLoadingId(null);
@@ -271,6 +295,7 @@ export default function Notifications() {
       ctx.decodeAudioData(
         audioData,
         (decoded) => {
+          console.log("[AbenaAI] Decoded audio successfully. Duration:", decoded.duration);
           const src = ctx.createBufferSource();
           src.buffer = decoded;
           src.connect(ctx.destination);
@@ -281,7 +306,8 @@ export default function Notifications() {
           src.start(0);
           scheduledSourcesRef.current.push(src);
         },
-        () => {
+        (err) => {
+          console.warn("[AbenaAI] decodeAudioData failed, trying raw PCM fallback:", err);
           // Raw 16-bit PCM fallback at 24kHz
           const i16 = new Int16Array(audioData);
           const f32 = new Float32Array(i16.length);
@@ -303,6 +329,9 @@ export default function Notifications() {
       console.error("[AbenaAI] failed:", e);
       setLoadingId(null);
       setPlayingId(null);
+      // Fallback to browser TTS (English) on failure
+      const lang = localStorage.getItem("selected_language") || "en";
+      playBrowserTTS(id, text, lang);
     }
   };
 

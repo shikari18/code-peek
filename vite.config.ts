@@ -22,7 +22,7 @@ export default defineConfig({
         "/api/abena-tts": {
           target: "https://abena.mobobi.com",
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/abena-tts/, "/playground/api/v1/tts/synthesize"),
+          rewrite: (path) => path.replace(/^\/api\/abena-tts/, "/playground/api/v1/tts/synthesize/"),
           secure: true,
         },
       },
