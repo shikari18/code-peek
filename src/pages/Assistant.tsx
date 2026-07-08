@@ -150,6 +150,18 @@ export default function Assistant() {
   useEffect(() => {
     mutedRef.current = muted;
   }, [muted]);
+
+  // Robustly attach stream to video element when it mounts to avoid React state timing race conditions
+  useEffect(() => {
+    if (active && videoOn && streamRef.current && videoRef.current) {
+      console.log("[GeminiLive] Attaching stream to video element...");
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch((err) => {
+        console.error("[GeminiLive] Error starting video element playback:", err);
+      });
+    }
+  }, [active, videoOn]);
+
   const [error, setError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -457,15 +469,7 @@ export default function Assistant() {
         console.warn("[GeminiLive] No audio track found in stream!");
       }
 
-      // Attach stream to <video> element if video mode is on
-      if (useVideo) {
-        requestAnimationFrame(() => {
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(() => {});
-          }
-        });
-      }
+      // Stream is automatically attached to <video> via useEffect hook once it mounts
 
       // Initialize audio output player
       pcmPlayerRef.current = new PCMPlayer(24000);
@@ -826,6 +830,8 @@ You know exactly what page the user is on (they are on the AI voice call assista
               }
             }
           }));
+
+          console.log("[GeminiLive] Transmitted camera video frame to WebSocket.");
         }
       }
     }, 1000);
