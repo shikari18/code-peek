@@ -115,7 +115,7 @@ function AppShell() {
           console.warn("Push notification failed to fire:", e);
         }
       }
-    }, 45000); // Send an alert every 45 seconds for testing/demo purposes
+    }, 15 * 60 * 1000); // Send at most one alert every 15 minutes
 
     return () => clearInterval(interval);
   }, []);

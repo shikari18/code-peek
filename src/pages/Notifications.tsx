@@ -66,8 +66,16 @@ export default function Notifications() {
     const lang = localStorage.getItem("selected_language") || "en";
     const cleanText = body.replace(/Click to know more\./gi, "").trim();
 
-    // TWI: Use Abena AI TTS (returns JSON with audio_base64 WAV)
-    if (lang === "tw") {
+    // Map language → Abena AI voice ID
+    const abenaVoiceMap: Record<string, string> = {
+      tw: "abena_high",   // Abena High — Twi (Akan)
+      ha: "abubakar",     // Abubakar — Hausa
+    };
+
+    const abenaVoice = abenaVoiceMap[lang];
+
+    if (abenaVoice) {
+      // Use Abena AI TTS (returns JSON with audio_base64 WAV)
       try {
         const res = await fetch("https://abena.mobobi.com/playground/api/v1/tts/synthesize/", {
           method: "POST",
@@ -75,7 +83,7 @@ export default function Notifications() {
             "Content-Type": "application/json",
             "X-API-Key": "sk_efe453b8d2774a22975cb14de4c4a5b9"
           },
-          body: JSON.stringify({ text: cleanText, voice: "abena_twi" })
+          body: JSON.stringify({ text: cleanText, voice: abenaVoice })
         });
 
         if (!res.ok) throw new Error(`Abena API error: ${res.status}`);
@@ -83,7 +91,7 @@ export default function Notifications() {
         const b64 = json.audio_base64;
         if (!b64) throw new Error("No audio_base64 in response");
 
-        // Decode base64 WAV → Blob → Object URL
+        // Decode base64 WAV → Blob → Object URL → play
         const byteChars = atob(b64);
         const byteArr = new Uint8Array(byteChars.length);
         for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
@@ -97,16 +105,16 @@ export default function Notifications() {
         await audio.play();
         return;
       } catch (e) {
-        console.error("[AbenaAI] Twi TTS failed, falling back to browser TTS:", e);
+        console.error("[AbenaAI] TTS failed:", e);
+        setPlayingId(null);
+        return;
       }
     }
 
-    // ENGLISH / FRENCH / HAUSA / fallback: use native SpeechSynthesis
+    // ENGLISH / FRENCH: native SpeechSynthesis
     if (!("speechSynthesis" in window)) { setPlayingId(null); return; }
     const utterance = new SpeechSynthesisUtterance(cleanText);
-    if (lang === "fr") utterance.lang = "fr-FR";
-    else if (lang === "ha") utterance.lang = "ha";
-    else utterance.lang = "en-US";
+    utterance.lang = lang === "fr" ? "fr-FR" : "en-US";
     utterance.onend = () => setPlayingId(null);
     utterance.onerror = () => setPlayingId(null);
     window.speechSynthesis.speak(utterance);
