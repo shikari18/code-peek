@@ -48,29 +48,29 @@ function AppShell() {
 
     // Schedule background simulated alerts (rain warning, feeding reminder, oxygen levels)
     const alertsPool = [
-      { 
-        icon: "CloudRain", 
-        title: "Weather Warning: Rain arriving soon", 
-        body: "Rain lowers water temperature and oxygen. Reduce feeding by 50% for Pond 1. Click to know more.",
-        time: "Just now" 
+      {
+        icon: "CloudRain",
+        title: "Weather Warning: Rain arriving soon",
+        body: "Rain lowers water temperature and oxygen. Reduce feeding by 50% for Pond 1.",
+        time: "Just now"
       },
-      { 
-        icon: "Droplet", 
-        title: "Pond Device Alert: Dissolved oxygen is dropping", 
-        body: "Pond 2 sensor reading is at 3.9 mg/L. Turn on aerators immediately. Click to know more.",
-        time: "Just now" 
+      {
+        icon: "Droplet",
+        title: "Pond Device Alert: Dissolved oxygen is dropping",
+        body: "Pond 2 sensor reading is at 3.9 mg/L. Turn on aerators immediately.",
+        time: "Just now"
       },
-      { 
-        icon: "TrendingUp", 
-        title: "Market Price Alert: Tilapia prices have increased", 
-        body: "Tilapia wholesale prices in Accra increased by 12% today. Click to know more.",
-        time: "Just now" 
+      {
+        icon: "TrendingUp",
+        title: "Market Price Alert: Tilapia prices have increased",
+        body: "Tilapia wholesale prices in Accra increased by 12% today.",
+        time: "Just now"
       },
-      { 
-        icon: "Calculator", 
-        title: "Feeding Reminder: Time to calculate today's feed", 
-        body: "Schedule calculation complete: Feed 3 bags of 2mm pellets to Pond 3. Click to know more.",
-        time: "Just now" 
+      {
+        icon: "Calculator",
+        title: "Feeding Reminder: Time to calculate today's feed",
+        body: "Schedule calculation complete: Feed 3 bags of 2mm pellets to Pond 3.",
+        time: "Just now"
       }
     ];
 

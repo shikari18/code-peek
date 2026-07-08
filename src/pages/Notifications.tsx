@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { PhoneShell } from "@/components/PhoneShell";
-import { CloudRain, TrendingUp, Pill, Droplet, FileText, Bell, Calculator, Play, Pause } from "lucide-react";
+import { CloudRain, TrendingUp, Pill, Droplet, FileText, Bell, Calculator, Play, Pause, Loader } from "lucide-react";
 
 type AlertItem = {
   id: string;
@@ -15,7 +15,7 @@ const DEFAULT_ALERTS: AlertItem[] = [
   { id: "1", iconName: "CloudRain", title: "Storm expected at 3PM", body: "Heavy rain and strong winds expected. Secure ponds and check oxygen levels.", time: "8:30 AM", unread: true },
   { id: "2", iconName: "TrendingUp", title: "Market price increase", body: "Catfish price in Kumasi increased by 8% today.", time: "7:15 AM", unread: true },
   { id: "3", iconName: "Pill", title: "Medicine reminder", body: "Oxytetracycline treatment scheduled for Pond 2.", time: "6:45 AM", unread: true },
-  { id: "4", iconName: "Droplet", title: "Water quality alert", body: "Dissolved oxygen dropped low in Pond 4.", time: "Yesterday", },
+  { id: "4", iconName: "Droplet", title: "Water quality alert", body: "Dissolved oxygen dropped low in Pond 4.", time: "Yesterday" },
   { id: "5", iconName: "FileText", title: "Feed plan updated", body: "AI adjusted today's feed amount for Pond 3.", time: "Yesterday" }
 ];
 
@@ -23,10 +23,53 @@ const iconMap: Record<string, any> = {
   CloudRain, TrendingUp, Pill, Droplet, FileText, Calculator, Bell
 };
 
+// Lightweight PCM player for Gemini audio chunks
+class PCMPlayer {
+  private ctx: AudioContext | null = null;
+  private nextTime = 0;
+  private sources: AudioBufferSourceNode[] = [];
+  readonly rate: number;
+  constructor(rate = 24000) { this.rate = rate; }
+  async init() {
+    if (!this.ctx) this.ctx = new AudioContext({ sampleRate: this.rate });
+    if (this.ctx.state === "suspended") await this.ctx.resume();
+    this.nextTime = this.ctx.currentTime;
+  }
+  playChunk(b64: string) {
+    if (!this.ctx) return;
+    try {
+      const bin = atob(b64); const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const i16 = new Int16Array(bytes.buffer);
+      const f32 = new Float32Array(i16.length);
+      for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+      const buf = this.ctx.createBuffer(1, f32.length, this.rate);
+      buf.copyToChannel(f32, 0);
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf; src.connect(this.ctx.destination);
+      const t = Math.max(this.ctx.currentTime, this.nextTime);
+      src.start(t); this.nextTime = t + buf.duration;
+      this.sources.push(src);
+      src.onended = () => { this.sources = this.sources.filter(s => s !== src); };
+    } catch {}
+  }
+  stop() {
+    this.sources.forEach(s => { try { s.stop(); } catch {} });
+    this.sources = [];
+    if (this.ctx) { this.ctx.close(); this.ctx = null; }
+  }
+}
+
 export default function Notifications() {
   const [notifications, setNotifications] = useState<AlertItem[]>([]);
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  // Refs for cleanup
+  const abenaCtxRef = useRef<AudioContext | null>(null);
+  const abenaSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const geminiWsRef = useRef<WebSocket | null>(null);
+  const geminiPlayerRef = useRef<PCMPlayer | null>(null);
 
   const loadNotifications = () => {
     const stored = localStorage.getItem("app_notifications");
@@ -44,80 +87,191 @@ export default function Notifications() {
     window.addEventListener("notifications_updated", loadNotifications);
     return () => {
       window.removeEventListener("notifications_updated", loadNotifications);
-      stopPlayback();
+      stopAll();
     };
   }, []);
 
-  const stopPlayback = () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = "";
-      audioRef.current = null;
-    }
+  const stopAll = () => {
+    // Stop Abena audio
+    try { abenaSourceRef.current?.stop(); } catch {}
+    abenaSourceRef.current = null;
+    try { abenaCtxRef.current?.close(); } catch {}
+    abenaCtxRef.current = null;
+    // Stop Gemini WS
+    try { geminiWsRef.current?.close(); } catch {}
+    geminiWsRef.current = null;
+    geminiPlayerRef.current?.stop();
+    geminiPlayerRef.current = null;
+    // Stop browser TTS
     window.speechSynthesis?.cancel();
     setPlayingId(null);
+    setLoadingId(null);
   };
 
-  const playVoiceNote = async (id: string, body: string) => {
-    if (playingId === id) { stopPlayback(); return; }
-    stopPlayback();
-    setPlayingId(id);
+  // ── Abena AI TTS (Twi / Hausa) ──────────────────────────────────────────
+  const playAbena = async (id: string, text: string, voice: string) => {
+    setLoadingId(id);
+    try {
+      const res = await fetch("https://abena.mobobi.com/playground/api/v1/tts/synthesize/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": "sk_efe453b8d2774a22975cb14de4c4a5b9"
+        },
+        body: JSON.stringify({ text, voice })
+      });
 
-    const lang = localStorage.getItem("selected_language") || "en";
-    const cleanText = body.replace(/Click to know more\./gi, "").trim();
+      if (!res.ok) throw new Error(`Abena ${res.status}`);
+      const json = await res.json();
+      const b64 = json.audio_base64;
+      if (!b64) throw new Error("No audio_base64");
 
-    // Map language → Abena AI voice ID
-    const abenaVoiceMap: Record<string, string> = {
-      tw: "abena_high",   // Abena High — Twi (Akan)
-      ha: "abubakar",     // Abubakar — Hausa
-    };
+      // Decode base64 → ArrayBuffer
+      const binStr = atob(b64);
+      const bytes = new Uint8Array(binStr.length);
+      for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
 
-    const abenaVoice = abenaVoiceMap[lang];
+      // Use AudioContext.decodeAudioData (bypasses autoplay policy)
+      const ctx = new AudioContext();
+      abenaCtxRef.current = ctx;
+      const audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
 
-    if (abenaVoice) {
-      // Use Abena AI TTS (returns JSON with audio_base64 WAV)
-      try {
-        const res = await fetch("https://abena.mobobi.com/playground/api/v1/tts/synthesize/", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-API-Key": "sk_efe453b8d2774a22975cb14de4c4a5b9"
-          },
-          body: JSON.stringify({ text: cleanText, voice: abenaVoice })
-        });
+      const src = ctx.createBufferSource();
+      src.buffer = audioBuffer;
+      src.connect(ctx.destination);
+      abenaSourceRef.current = src;
 
-        if (!res.ok) throw new Error(`Abena API error: ${res.status}`);
-        const json = await res.json();
-        const b64 = json.audio_base64;
-        if (!b64) throw new Error("No audio_base64 in response");
-
-        // Decode base64 WAV → Blob → Object URL → play
-        const byteChars = atob(b64);
-        const byteArr = new Uint8Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
-        const blob = new Blob([byteArr], { type: "audio/wav" });
-        const url = URL.createObjectURL(blob);
-
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        audio.onended = () => { URL.revokeObjectURL(url); setPlayingId(null); };
-        audio.onerror = () => { URL.revokeObjectURL(url); setPlayingId(null); };
-        await audio.play();
-        return;
-      } catch (e) {
-        console.error("[AbenaAI] TTS failed:", e);
+      src.onended = () => {
+        ctx.close().catch(() => {});
+        abenaCtxRef.current = null;
+        abenaSourceRef.current = null;
         setPlayingId(null);
-        return;
-      }
+      };
+
+      setLoadingId(null);
+      setPlayingId(id);
+      src.start(0);
+    } catch (e) {
+      console.error("[AbenaAI] TTS failed:", e);
+      setLoadingId(null);
+      setPlayingId(null);
+    }
+  };
+
+  // ── Gemini Live TTS (English / French) ──────────────────────────────────
+  const playGemini = async (id: string, text: string, lang: string) => {
+    const apiKey = localStorage.getItem("gemini_live_api_key") || "";
+    if (!apiKey) {
+      // Fallback to browser TTS if no Gemini key
+      playBrowserTTS(id, text, lang);
+      return;
     }
 
-    // ENGLISH / FRENCH: native SpeechSynthesis
+    setLoadingId(id);
+    try {
+      const player = new PCMPlayer(24000);
+      await player.init();
+      geminiPlayerRef.current = player;
+
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+      const ws = new WebSocket(wsUrl);
+      geminiWsRef.current = ws;
+
+      ws.onopen = () => {
+        const langInstruction = lang === "fr"
+          ? "Respond in French."
+          : "Respond in English.";
+
+        ws.send(JSON.stringify({
+          setup: {
+            model: "models/gemini-live-2.5-flash-preview",
+            generationConfig: {
+              responseModalities: ["AUDIO"],
+              speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } } }
+            },
+            systemInstruction: { parts: [{ text: langInstruction }] }
+          }
+        }));
+      };
+
+      ws.onmessage = async (event) => {
+        try {
+          const raw = typeof event.data === "string" ? event.data : await event.data.text();
+          const msg = JSON.parse(raw);
+
+          if (msg.setupComplete) {
+            setLoadingId(null);
+            setPlayingId(id);
+            // Send the text to speak
+            ws.send(JSON.stringify({
+              clientContent: {
+                turns: [{ role: "user", parts: [{ text: `Read this notification aloud clearly: "${text}"` }] }],
+                turnComplete: true
+              }
+            }));
+          }
+
+          const parts = msg.serverContent?.modelTurn?.parts;
+          if (parts) {
+            for (const part of parts) {
+              if (part.inlineData?.data) player.playChunk(part.inlineData.data);
+            }
+          }
+
+          if (msg.serverContent?.turnComplete) {
+            // Wait for audio to finish then clean up
+            setTimeout(() => {
+              ws.close();
+              geminiWsRef.current = null;
+              geminiPlayerRef.current?.stop();
+              geminiPlayerRef.current = null;
+              setPlayingId(null);
+            }, 1500);
+          }
+        } catch {}
+      };
+
+      ws.onerror = () => {
+        setLoadingId(null);
+        playBrowserTTS(id, text, lang); // fallback
+      };
+      ws.onclose = () => {};
+
+    } catch (e) {
+      console.error("[GeminiTTS] failed:", e);
+      setLoadingId(null);
+      playBrowserTTS(id, text, lang);
+    }
+  };
+
+  // ── Browser TTS fallback ─────────────────────────────────────────────────
+  const playBrowserTTS = (id: string, text: string, lang: string) => {
     if (!("speechSynthesis" in window)) { setPlayingId(null); return; }
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = lang === "fr" ? "fr-FR" : "en-US";
-    utterance.onend = () => setPlayingId(null);
-    utterance.onerror = () => setPlayingId(null);
-    window.speechSynthesis.speak(utterance);
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang === "fr" ? "fr-FR" : "en-US";
+    u.onstart = () => setPlayingId(id);
+    u.onend = () => setPlayingId(null);
+    u.onerror = () => setPlayingId(null);
+    window.speechSynthesis.speak(u);
+    setPlayingId(id);
+  };
+
+  // ── Main handler ──────────────────────────────────────────────────────────
+  const handlePlay = (id: string, body: string) => {
+    if (playingId === id || loadingId === id) { stopAll(); return; }
+    stopAll();
+
+    const lang = localStorage.getItem("selected_language") || "en";
+    // Strip any trailing "Click to know more" from body just in case
+    const text = body.replace(/\.?\s*Click to know more\.?/gi, "").trim();
+
+    if (lang === "tw") {
+      playAbena(id, text, "abena_high");
+    } else if (lang === "ha") {
+      playAbena(id, text, "abubakar");
+    } else {
+      playGemini(id, text, lang);
+    }
   };
 
   const handleMarkAllRead = () => {
@@ -150,7 +304,7 @@ export default function Notifications() {
             </div>
             <p className="font-semibold text-slate-800">All caught up!</p>
             <p className="text-xs text-muted-foreground max-w-[200px] leading-relaxed">
-              No alerts yet. Background monitoring will push live updates for weather, oxygen and market changes.
+              No alerts yet. Background monitoring pushes live updates for weather, oxygen and market changes.
             </p>
           </div>
         ) : (
@@ -158,6 +312,10 @@ export default function Notifications() {
             {notifications.map((it) => {
               const IconComponent = iconMap[it.iconName] || Bell;
               const isPlaying = playingId === it.id;
+              const isLoading = loadingId === it.id;
+              // Strip "Click to know more." before displaying
+              const displayBody = it.body.replace(/\.?\s*Click to know more\.?/gi, "").trim();
+
               return (
                 <div key={it.id} className="py-4 flex gap-3 items-center">
                   {/* Icon */}
@@ -176,18 +334,25 @@ export default function Notifications() {
                         {it.unread && <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_6px_rgba(3,105,161,0.5)]" />}
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed mt-0.5 pr-2">{it.body}</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed mt-0.5 pr-2">{displayBody}</p>
                   </div>
 
-                  {/* Play / Pause voice button */}
+                  {/* Play / Pause / Loading button */}
                   <button
-                    onClick={() => playVoiceNote(it.id, it.body)}
-                    className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 border transition-all active:scale-90 ${isPlaying ? "bg-rose-50 border-rose-200 text-rose-600 animate-pulse" : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"}`}
-                    title={isPlaying ? "Pause" : "Play voice note"}
+                    onClick={() => handlePlay(it.id, displayBody)}
+                    className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 border transition-all active:scale-90 ${
+                      isPlaying ? "bg-rose-50 border-rose-200 text-rose-600 animate-pulse"
+                      : isLoading ? "bg-amber-50 border-amber-200 text-amber-500"
+                      : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                    }`}
+                    title={isPlaying ? "Stop" : isLoading ? "Loading…" : "Play voice note"}
                   >
-                    {isPlaying
-                      ? <Pause className="h-4 w-4" fill="currentColor" />
-                      : <Play className="h-4 w-4 ml-0.5" fill="currentColor" />}
+                    {isLoading
+                      ? <Loader className="h-4 w-4 animate-spin" />
+                      : isPlaying
+                        ? <Pause className="h-4 w-4" fill="currentColor" />
+                        : <Play className="h-4 w-4 ml-0.5" fill="currentColor" />
+                    }
                   </button>
                 </div>
               );
