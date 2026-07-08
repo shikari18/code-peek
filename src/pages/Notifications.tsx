@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { PhoneShell } from "@/components/PhoneShell";
-import { CloudRain, TrendingUp, Pill, Droplet, FileText, Bell, Calculator } from "lucide-react";
+import { CloudRain, TrendingUp, Pill, Droplet, FileText, Bell, Calculator, Play, Pause } from "lucide-react";
 
 type AlertItem = {
   id: string;
@@ -31,6 +31,7 @@ const iconMap: Record<string, any> = {
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState<AlertItem[]>([]);
+  const [playingId, setPlayingId] = useState<string | null>(null);
 
   const loadNotifications = () => {
     const stored = localStorage.getItem("app_notifications");
@@ -53,8 +54,27 @@ export default function Notifications() {
     window.addEventListener("notifications_updated", loadNotifications);
     return () => {
       window.removeEventListener("notifications_updated", loadNotifications);
+      window.speechSynthesis.cancel();
     };
   }, []);
+
+  const playVoiceNote = (id: string, text: string) => {
+    if (playingId === id) {
+      window.speechSynthesis.cancel();
+      setPlayingId(null);
+      return;
+    }
+    
+    window.speechSynthesis.cancel();
+    // Strip "Click to know more." from spoken text for natural reading
+    const cleanText = text.replace(/Click to know more\./gi, "").trim();
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.onend = () => setPlayingId(null);
+    utterance.onerror = () => setPlayingId(null);
+    
+    setPlayingId(id);
+    window.speechSynthesis.speak(utterance);
+  };
 
   const handleMarkAllRead = () => {
     const updated = notifications.map(n => ({ ...n, unread: false }));
@@ -106,28 +126,47 @@ export default function Notifications() {
             {notifications.map((it) => {
               const IconComponent = iconMap[it.iconName] || Bell;
               return (
-                <div key={it.id} className="py-5 flex gap-4 animate-slide-up">
-                  <div className={`h-11 w-11 rounded-full border grid place-items-center shrink-0 ${
-                    it.unread 
-                      ? "bg-primary/5 border-primary/20 text-primary shadow-sm" 
-                      : "bg-surface border-border/70 text-muted-foreground/80"
-                  }`}>
-                    <IconComponent className="h-[18px] w-[18px]" strokeWidth={2} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className={`font-semibold tracking-tight ${it.unread ? "text-slate-950 font-bold" : "text-slate-700"}`}>
-                        {it.title}
-                      </p>
-                      <span className="text-xs text-muted-foreground shrink-0 pt-0.5">{it.time}</span>
+                <div key={it.id} className="py-5 flex gap-4 animate-slide-up items-center justify-between">
+                  <div className="flex gap-4 items-start flex-1 min-w-0">
+                    <div className={`h-11 w-11 rounded-full border grid place-items-center shrink-0 ${
+                      it.unread 
+                        ? "bg-primary/5 border-primary/20 text-primary shadow-sm" 
+                        : "bg-surface border-border/70 text-muted-foreground/80"
+                    }`}>
+                      <IconComponent className="h-[18px] w-[18px]" strokeWidth={2} />
                     </div>
-                    <div className="flex items-start justify-between gap-3 mt-1">
-                      <p className="text-xs text-muted-foreground leading-relaxed">{it.body}</p>
-                      {it.unread && (
-                        <span className="h-2.5 w-2.5 rounded-full bg-primary mt-1.5 shrink-0 shadow-[0_0_8px_rgba(3,105,161,0.5)]" />
-                      )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className={`font-semibold tracking-tight ${it.unread ? "text-slate-950 font-bold" : "text-slate-700"}`}>
+                          {it.title}
+                        </p>
+                        <span className="text-xs text-muted-foreground shrink-0 pt-0.5">{it.time}</span>
+                      </div>
+                      <div className="flex items-start justify-between gap-3 mt-1">
+                        <p className="text-xs text-muted-foreground leading-relaxed">{it.body}</p>
+                        {it.unread && (
+                          <span className="h-2.5 w-2.5 rounded-full bg-primary mt-1.5 shrink-0 shadow-[0_0_8px_rgba(3,105,161,0.5)]" />
+                        )}
+                      </div>
                     </div>
                   </div>
+
+                  {/* Voice Note Readout Button */}
+                  <button
+                    onClick={() => playVoiceNote(it.id, it.body)}
+                    className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 border transition-all active:scale-90 ml-3 ${
+                      playingId === it.id 
+                        ? "bg-rose-50 border-rose-200 text-rose-600 shadow-sm animate-pulse" 
+                        : "bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100"
+                    }`}
+                    title={playingId === it.id ? "Pause Voice" : "Play Voice"}
+                  >
+                    {playingId === it.id ? (
+                      <Pause className="h-4 w-4" fill="currentColor" />
+                    ) : (
+                      <Play className="h-4 w-4 fill-current ml-0.5" />
+                    )}
+                  </button>
                 </div>
               );
             })}

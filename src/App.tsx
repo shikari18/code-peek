@@ -50,26 +50,26 @@ function AppShell() {
     const alertsPool = [
       { 
         icon: "CloudRain", 
-        title: "Rain arriving in 1 hour", 
-        body: "Rain lowers water temperature and oxygen. Reduce feeding by 50% for Pond 1.",
+        title: "Weather Warning: Rain arriving soon", 
+        body: "Rain lowers water temperature and oxygen. Reduce feeding by 50% for Pond 1. Click to know more.",
         time: "Just now" 
       },
       { 
         icon: "Droplet", 
-        title: "Oxygen Drop Alert", 
-        body: "Pond 2 sensor reading is at 3.9 mg/L. Turn on aerators immediately.",
+        title: "Pond Device Alert: Dissolved oxygen is dropping", 
+        body: "Pond 2 sensor reading is at 3.9 mg/L. Turn on aerators immediately. Click to know more.",
         time: "Just now" 
       },
       { 
         icon: "TrendingUp", 
-        title: "Market Price Alert", 
-        body: "Tilapia wholesale prices in Accra increased by 12% today.",
+        title: "Market Price Alert: Tilapia prices have increased", 
+        body: "Tilapia wholesale prices in Accra increased by 12% today. Click to know more.",
         time: "Just now" 
       },
       { 
         icon: "Calculator", 
-        title: "Feeding Time", 
-        body: "Schedule calculation complete: Feed 3 bags of 2mm pellets to Pond 3.",
+        title: "Feeding Reminder: Time to calculate today's feed", 
+        body: "Schedule calculation complete: Feed 3 bags of 2mm pellets to Pond 3. Click to know more.",
         time: "Just now" 
       }
     ];
@@ -102,10 +102,15 @@ function AppShell() {
       // Trigger standard browser push notification if permitted
       if ("Notification" in window && Notification.permission === "granted") {
         try {
-          new Notification(alert.title, {
+          const instance = new Notification(alert.title, {
             body: alert.body,
-            icon: "/favicon.ico"
+            icon: "/fish-logo.png"
           });
+          instance.onclick = () => {
+            window.focus();
+            window.history.pushState({}, "", "/notifications");
+            window.dispatchEvent(new Event("popstate"));
+          };
         } catch (e) {
           console.warn("Push notification failed to fire:", e);
         }
