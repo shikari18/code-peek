@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { PhoneShell } from "@/components/PhoneShell";
-import { Video, VideoOff, Square, MicOff, Mic, Settings, X, Info } from "lucide-react";
+import { Video, VideoOff, Square, MicOff, Mic, Settings, X, Info, RotateCw } from "lucide-react";
 
 // Fixed API Key provided by user, supports VITE_GEMINI_API_KEY override
 const FIXED_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
@@ -32,6 +32,7 @@ Functions/Tools you can call:
 - getHarvestListings(): Returns the marketplace listings.
 - addHarvestListing(species, qty, size, date, buyers): Adds a new harvest offer. Always call this if Emmanuel tells you to list fish for harvest.
 - calculateFeed(pond, biomass_kg, feed_type, temp_c): Performs feed requirements calculation and saves it to history. Always call this if Emmanuel asks you to calculate or log feed calculations.
+- updateFarmProfile(fishCount, species, avgWeight, location): Edits the user's core farm profile settings (e.g. fish count, species, average weight, or location) in the application. Always call this if Emmanuel asks you to update, set, add, or reduce his fish count, species, weight, or location.
 
 Guidelines:
 - Keep your speech response concise, natural, and friendly. Avoid listing massive walls of text since you are in a live voice conversation. Speak in brief, conversational paragraphs.
@@ -144,6 +145,7 @@ export default function Assistant() {
   const [status, setStatus] = useState<"idle" | "connecting" | "listening" | "speaking">("idle");
   const [videoOn, setVideoOn] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
 
   // Ref to hold the current muted state to avoid stale closure issues in the audio worklet
   const mutedRef = useRef(muted);
@@ -395,6 +397,40 @@ export default function Assistant() {
           }
         };
       }
+      case "updateFarmProfile": {
+        const updates: any = {};
+        if (args.fishCount !== undefined) {
+          localStorage.setItem("onboarding_fish_count", args.fishCount.toString());
+          updates.fishCount = args.fishCount;
+        }
+        if (args.species !== undefined) {
+          localStorage.setItem("onboarding_species", args.species);
+          updates.species = args.species;
+        }
+        if (args.avgWeight !== undefined) {
+          localStorage.setItem("onboarding_avg_weight", args.avgWeight.toString());
+          updates.avgWeight = args.avgWeight;
+        }
+        if (args.location !== undefined) {
+          if (args.location.includes(",")) {
+            const parts = args.location.split(",");
+            const lat = parseFloat(parts[0]);
+            const lng = parseFloat(parts[1]);
+            if (!isNaN(lat) && !isNaN(lng)) {
+              localStorage.setItem("onboarding_location", JSON.stringify({ lat, lng }));
+              updates.location = { lat, lng };
+            } else {
+              localStorage.setItem("onboarding_location", JSON.stringify({ lat: 5.56, lng: -0.20 }));
+              updates.location = args.location;
+            }
+          } else {
+            localStorage.setItem("onboarding_location", JSON.stringify({ lat: 5.56, lng: -0.20 }));
+            updates.location = args.location;
+          }
+        }
+        console.log("[GeminiLive] AI edited farm profile:", updates);
+        return { success: true, message: "Farm profile updated successfully", updates };
+      }
       default:
         return { error: `Function ${name} not found.` };
     }
@@ -593,6 +629,19 @@ You know exactly what page the user is on (they are on the AI voice call assista
                       },
                       required: ["pond", "biomass_kg", "feed_type", "temp_c"]
                     }
+                  },
+                  {
+                    name: "updateFarmProfile",
+                    description: "Update the user's farm profile including total fish count, primary species, average fish weight, and location. Call this if the user asks you to add, reduce, change, or set their fish count, species, average weight, or location.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        fishCount: { type: "STRING", description: "New total fish inventory quantity (e.g., '6000')" },
+                        species: { type: "STRING", description: "Primary species name (e.g., 'Tilapia', 'Catfish')" },
+                        avgWeight: { type: "STRING", description: "New average fish weight in grams (e.g., '180')" },
+                        location: { type: "STRING", description: "New farm location description or coordinates (e.g. 'Kumasi' or '5.62,-0.19')" }
+                      }
+                    }
                   }
                 ]
               }
@@ -623,7 +672,7 @@ You know exactly what page the user is on (they are on the AI voice call assista
             console.log("[GeminiLive] Setup completed successfully!");
             setStatus("speaking");
 
-            // Trigger an immediate short greeting turn from the AI
+            // Trigger an immediate short greeting turn from the AI (acknowledging camera if active)
             const greetingPrompt = {
               clientContent: {
                 turns: [
@@ -631,7 +680,9 @@ You know exactly what page the user is on (they are on the AI voice call assista
                     role: "user",
                     parts: [
                       {
-                        text: "Hello! Please give a very short, warm greeting to Emmanuel (one sentence only, e.g., 'Hello there, Emmanuel! How can I help you today?')."
+                        text: useVideo 
+                          ? "Hello! Please give a very short, warm greeting to Emmanuel, acknowledging that you can see his camera feed now (one sentence only, e.g., 'Hello there, Emmanuel! I can see your camera feed now. How can I help you today?')."
+                          : "Hello! Please give a very short, warm greeting to Emmanuel (one sentence only, e.g., 'Hello there, Emmanuel! How can I help you today?')."
                       }
                     ]
                   }
@@ -837,6 +888,40 @@ You know exactly what page the user is on (they are on the AI voice call assista
     }, 1000);
   };
 
+  const flipCamera = async () => {
+    if (!active || !videoOn || !streamRef.current) return;
+    
+    try {
+      const newFacingMode = facingMode === "user" ? "environment" : "user";
+      setFacingMode(newFacingMode);
+      
+      // Stop current video track
+      const currentVideoTrack = streamRef.current.getVideoTracks()[0];
+      if (currentVideoTrack) {
+        currentVideoTrack.stop();
+        streamRef.current.removeTrack(currentVideoTrack);
+      }
+      
+      // Request new camera feed with new facingMode
+      const newCameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 480 }, height: { ideal: 480 }, facingMode: newFacingMode }
+      });
+      
+      const newVideoTrack = newCameraStream.getVideoTracks()[0];
+      if (newVideoTrack) {
+        streamRef.current.addTrack(newVideoTrack);
+        
+        // Re-attach to video element
+        if (videoRef.current) {
+          videoRef.current.srcObject = streamRef.current;
+        }
+      }
+      console.log(`[GeminiLive] Camera flipped to ${newFacingMode}`);
+    } catch (e) {
+      console.error("Failed to flip camera:", e);
+    }
+  };
+
   const handleToggleCall = () => {
     if (active) {
       stopAll();
@@ -896,6 +981,122 @@ You know exactly what page the user is on (they are on the AI voice call assista
       </div>
     );
   };
+
+  if (videoOn && active) {
+    return (
+      <PhoneShell>
+        <div className="relative w-full h-full bg-black overflow-hidden flex flex-col justify-between">
+          {/* Fullscreen Video Preview */}
+          <video
+            ref={videoRef}
+            className={`absolute inset-0 w-full h-full object-cover z-0 ${
+              facingMode === "user" ? "transform -scale-x-100" : ""
+            }`}
+            muted
+            playsInline
+          />
+
+          {/* Semi-transparent dark overlay at the top for status */}
+          <div className="relative z-10 p-6 bg-gradient-to-b from-black/60 to-transparent text-white flex justify-between items-center">
+            <div>
+              <p className="text-[10px] uppercase font-bold tracking-widest text-emerald-400">AI Assistant • Live Video</p>
+              <h2 className="text-xl font-semibold mt-1 capitalize">{status === "speaking" ? "Speaking..." : "Listening..."}</h2>
+            </div>
+            <button
+              onClick={flipCamera}
+              className="h-10 w-10 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur grid place-items-center text-white active:scale-95 transition-all"
+              aria-label="Flip Camera"
+            >
+              <RotateCw className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Floating Controls at the bottom */}
+          <div className="relative z-10 p-6 bg-gradient-to-t from-black/70 via-black/30 to-transparent flex flex-col items-center gap-6 pb-8">
+            <div className="flex items-center gap-[4px] justify-center h-8">
+              {/* Simple active wave bars */}
+              {Array.from({ length: 9 }).map((_, i) => (
+                <span
+                  key={i}
+                  className={`w-[3px] rounded-full bg-white/80 ${status === "speaking" ? "animate-bounce" : "animate-pulse"}`}
+                  style={{
+                    height: status === "speaking" ? `${10 + Math.sin(i) * 15}px` : "6px",
+                    animationDelay: `${i * 60}ms`
+                  }}
+                />
+              ))}
+            </div>
+
+            <div className="flex items-center justify-center gap-8 w-full max-w-xs">
+              {/* Mute Button */}
+              <button
+                onClick={toggleMute}
+                className={`h-12 w-12 rounded-full border backdrop-blur flex items-center justify-center transition-all active:scale-95 ${
+                  muted 
+                    ? "bg-rose-500/80 border-rose-400 text-white" 
+                    : "bg-white/10 border-white/20 text-white hover:bg-white/20"
+                }`}
+              >
+                {muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+              </button>
+
+              {/* End Call Button */}
+              <button
+                onClick={stopAll}
+                className="h-16 w-16 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-lg active:scale-95 transition-all"
+                aria-label="End Call"
+              >
+                <Square className="h-5 w-5" fill="currentColor" />
+              </button>
+
+              {/* Stop Video Button */}
+              <button
+                onClick={() => {
+                  // Keep audio call active but turn off video
+                  // 1. Stop video track
+                  const videoTrack = streamRef.current?.getVideoTracks()[0];
+                  if (videoTrack) {
+                    videoTrack.stop();
+                    streamRef.current?.removeTrack(videoTrack);
+                  }
+                  // 2. Clear video interval
+                  if (videoIntervalRef.current) {
+                    window.clearInterval(videoIntervalRef.current);
+                    videoIntervalRef.current = null;
+                  }
+                  // 3. Set state
+                  setVideoOn(false);
+                  
+                  // 4. Send system notice to AI
+                  if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(JSON.stringify({
+                      clientContent: {
+                        turns: [
+                          {
+                            role: "user",
+                            parts: [
+                              {
+                                text: "[System notice: The user has stopped their video feed. You can no longer see them, but they can still hear you and speak to you.]"
+                              }
+                            ]
+                          }
+                        ],
+                        turnComplete: true
+                      }
+                    }));
+                  }
+                }}
+                className="h-12 w-12 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 backdrop-blur flex items-center justify-center transition-all active:scale-95"
+                aria-label="Stop Video"
+              >
+                <Video className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </PhoneShell>
+    );
+  }
 
   return (
     <PhoneShell>

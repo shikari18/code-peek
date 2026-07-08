@@ -187,82 +187,42 @@ export default function Onboarding() {
                       </p>
                     </div>
 
-                    <div className="space-y-4 pt-2">
-                      {/* Location permission card */}
-                      <div className={`p-4 rounded-2xl border transition-all ${
-                        locationStatus === "granted" 
-                          ? "bg-emerald-50/50 border-emerald-200" 
-                          : locationStatus === "denied"
-                          ? "bg-rose-50/50 border-rose-200"
-                          : "bg-white border-slate-200"
-                      }`}>
-                        <div className="flex items-start gap-4">
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 ${
-                            locationStatus === "granted" 
-                              ? "bg-emerald-100 text-emerald-600" 
-                              : "bg-slate-100 text-slate-600"
-                          }`}>
-                            <MapPin className="h-5 w-5" />
+                    <div className="space-y-3 pt-2">
+                      <button
+                        onClick={requestLocation}
+                        className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all ${
+                          locationStatus === "granted" ? "bg-green-50 border-green-200" : "bg-white border-slate-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${locationStatus === "granted" ? "bg-green-100" : "bg-slate-100"}`}>
+                            <MapPin className={`h-5 w-5 ${locationStatus === "granted" ? "text-green-600" : "text-slate-500"}`} />
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-sm text-slate-800">Location Access</p>
-                            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                              Required to monitor local wind speeds, atmospheric pressure, and weather storms.
-                            </p>
-                            {locationStatus === "granted" ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 mt-2">
-                                <Check className="h-3 w-3" strokeWidth={3} /> Location allowed
-                              </span>
-                            ) : (
-                              <button
-                                onClick={requestLocation}
-                                disabled={locationStatus === "requesting"}
-                                className="mt-2 text-xs font-semibold text-primary hover:text-primary-dark active:scale-95 transition-transform"
-                              >
-                                {locationStatus === "requesting" ? "Requesting..." : "Allow Location"}
-                              </button>
-                            )}
+                          <div className="text-left">
+                            <p className="text-sm font-semibold text-slate-900">Access Location</p>
+                            <p className="text-[11px] text-muted-foreground">For local weather data</p>
                           </div>
                         </div>
-                      </div>
+                        {locationStatus === "granted" ? <Check className="h-5 w-5 text-green-600" /> : <ChevronRight className="h-5 w-5 text-slate-300" />}
+                      </button>
 
-                      {/* Camera permission card */}
-                      <div className={`p-4 rounded-2xl border transition-all ${
-                        cameraStatus === "granted" 
-                          ? "bg-emerald-50/50 border-emerald-200" 
-                          : cameraStatus === "denied"
-                          ? "bg-rose-50/50 border-rose-200"
-                          : "bg-white border-slate-200"
-                      }`}>
-                        <div className="flex items-start gap-4">
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 ${
-                            cameraStatus === "granted" 
-                              ? "bg-emerald-100 text-emerald-600" 
-                              : "bg-slate-100 text-slate-600"
-                          }`}>
-                            <Camera className="h-5 w-5" />
+                      <button
+                        onClick={requestCamera}
+                        className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all ${
+                          cameraStatus === "granted" ? "bg-green-50 border-green-200" : "bg-white border-slate-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${cameraStatus === "granted" ? "bg-green-100" : "bg-slate-100"}`}>
+                            <Camera className={`h-5 w-5 ${cameraStatus === "granted" ? "text-green-600" : "text-slate-500"}`} />
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-sm text-slate-800">Camera Access</p>
-                            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                              Enables the AI "Fish Doctor" to inspect visual pond water color, setup, and fish behavior.
-                            </p>
-                            {cameraStatus === "granted" ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 mt-2">
-                                <Check className="h-3 w-3" strokeWidth={3} /> Camera allowed
-                              </span>
-                            ) : (
-                              <button
-                                onClick={requestCamera}
-                                disabled={cameraStatus === "requesting"}
-                                className="mt-2 text-xs font-semibold text-primary hover:text-primary-dark active:scale-95 transition-transform"
-                              >
-                                {cameraStatus === "requesting" ? "Requesting..." : "Allow Camera"}
-                              </button>
-                            )}
+                          <div className="text-left">
+                            <p className="text-sm font-semibold text-slate-900">Access Camera</p>
+                            <p className="text-[11px] text-muted-foreground">For health diagnostics</p>
                           </div>
                         </div>
-                      </div>
+                        {cameraStatus === "granted" ? <Check className="h-5 w-5 text-green-600" /> : <ChevronRight className="h-5 w-5 text-slate-300" />}
+                      </button>
                     </div>
                   </div>
                 )}
