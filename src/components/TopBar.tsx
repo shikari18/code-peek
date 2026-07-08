@@ -1,4 +1,4 @@
-import { PhoneCall } from "lucide-react";
+import { Headset } from "lucide-react";
 import { Link } from "wouter";
 import profileImg from "@/assets/profile-emmanuel.jpg";
 
@@ -12,7 +12,7 @@ export function TopBar() {
           aria-label="Call Assistant"
           className="h-9 w-9 grid place-items-center rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors shadow-sm active:scale-95"
         >
-          <PhoneCall className="h-[16px] w-[16px]" strokeWidth={2.4} />
+          <Headset className="h-[18px] w-[18px]" strokeWidth={2} />
         </Link>
         <Link
           href="/profile"
