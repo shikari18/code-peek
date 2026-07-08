@@ -100,10 +100,45 @@ export default function Home() {
     }
   })();
 
+  // Dynamic stats computed from onboarding data
+  const stats = (() => {
+    const fishCount = parseInt(localStorage.getItem("onboarding_fish_count") || "0", 10);
+    const avgWeight = parseFloat(localStorage.getItem("onboarding_avg_weight") || "0"); // grams
+    const species = (localStorage.getItem("onboarding_species") || "Tilapia").toLowerCase();
+
+    const isTilapia = species.includes("tilapia");
+    const targetWeight = isTilapia ? 500 : 700; // grams at harvest
+    const totalCycleDays = isTilapia ? 180 : 240; // full grow-out cycle
+
+    // Grow day: how far through the cycle based on current avg weight
+    const weightRatio = avgWeight > 0 ? Math.min(avgWeight / targetWeight, 0.99) : 0;
+    const growDay = Math.round(weightRatio * totalCycleDays);
+    const daysLeft = Math.max(totalCycleDays - growDay, 0);
+
+    // Projected revenue: fish × harvest weight × market price (GHS)
+    const pricePerKg = isTilapia ? 32 : 45;
+    const projectedRevenue = Math.round(fishCount * (targetWeight / 1000) * pricePerKg);
+
+    const ready = fishCount > 0 && avgWeight > 0;
+
+    return {
+      growDay: ready ? growDay.toString() : "--",
+      daysLeft: ready ? daysLeft.toString() : "--",
+      projectedRevenue: ready ? `GH₵ ${projectedRevenue.toLocaleString()}` : "--",
+    };
+  })();
+
+  const timeOfDay = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return "morning";
+    if (h < 17) return "afternoon";
+    return "evening";
+  })();
+
   return (
     <PhoneShell>
       <div className="px-6 pt-4">
-        <h1 className="display text-5xl text-foreground">Good morning,</h1>
+        <h1 className="display text-5xl text-foreground">Good {timeOfDay},</h1>
         <h2 className="display-bold text-6xl text-foreground mt-1">Emmanuel</h2>
         <div className="mt-5 text-sm text-muted-foreground">
           <p className="text-foreground/80 font-medium">{locationText.farm}</p>
@@ -158,9 +193,9 @@ export default function Home() {
         </div>
 
         <div className="mt-5 grid grid-cols-3 gap-2">
-          <Stat value={completedSteps < 5 ? "--" : "47"} label="Grow Day" />
-          <Stat value={completedSteps < 5 ? "--" : "23"} label="Days Left" />
-          <Stat value={completedSteps < 5 ? "--" : "24,560"} label="Projected Revenue" small />
+          <Stat value={stats.growDay} label="Grow Day" />
+          <Stat value={stats.daysLeft} label="Days Left" />
+          <Stat value={stats.projectedRevenue} label="Projected Revenue" small />
         </div>
 
         <p className="mt-8 text-sm text-muted-foreground">Quick Access</p>

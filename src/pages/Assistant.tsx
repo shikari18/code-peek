@@ -232,11 +232,14 @@ export default function Assistant() {
 
   const handleSaveVoiceSettings = () => {
     localStorage.setItem("gemini_live_voice", tempVoice);
-    localStorage.setItem("gemini_live_language", tempLanguage);
+    // Save language to the shared key so TopBar, Notifications and Assistant all stay in sync
+    localStorage.setItem("selected_language", tempLanguage);
     localStorage.setItem("gemini_live_api_key", tempKey);
     setSelectedVoice(tempVoice);
     setSelectedLanguage(tempLanguage);
     setApiKey(tempKey);
+    // Notify all components of language change immediately
+    window.dispatchEvent(new Event("language_changed"));
     setShowVoiceSettings(false);
   };
 
@@ -1391,16 +1394,15 @@ You know exactly what page the user is on (they are on the AI voice call assista
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground block mb-1">Speech Language</label>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1">Voice Call Language</label>
+                  <p className="text-[10px] text-muted-foreground mb-2">Twi is supported via Play buttons on the Alerts page. Voice calls support English and French only.</p>
                   <select
                     value={tempLanguage}
                     onChange={(e) => setTempLanguage(e.target.value)}
                     className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-primary appearance-none cursor-pointer"
                   >
-                    <option value="en-US">English (United States)</option>
-                    <option value="en-GB">English (United Kingdom)</option>
-                    <option value="fr-FR">French (France)</option>
-                    <option value="es-ES">Spanish (Spain)</option>
+                    <option value="en">English</option>
+                    <option value="fr">French</option>
                   </select>
                 </div>
 
