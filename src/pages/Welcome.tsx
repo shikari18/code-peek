@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Check, ArrowRight } from "lucide-react";
 
@@ -11,7 +11,16 @@ const languages = [
 
 export default function Welcome() {
   const [selected, setSelected] = useState<string>("en");
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
+
+  useEffect(() => {
+    if (location === "/") {
+      const onboardingCompleted = localStorage.getItem("onboarding_completed");
+      if (onboardingCompleted !== null) {
+        navigate("/home", { replace: true });
+      }
+    }
+  }, [location, navigate]);
 
   return (
     <div className="min-h-screen w-full flex justify-center">
