@@ -250,7 +250,7 @@ export default function Notifications() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-API-Key": ABENA_KEY
+          "Authorization": `Bearer ${ABENA_KEY}`
         },
         body: JSON.stringify({ text, voice })
       });
