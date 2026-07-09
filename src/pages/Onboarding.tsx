@@ -353,6 +353,23 @@ export default function Onboarding() {
                           6 or more ponds
                         </button>
                       </div>
+
+                      {/* Middle Proceed and Skip buttons for Step 2 */}
+                      <div className="pt-6 flex flex-col gap-2">
+                        <button
+                          onClick={handleNext}
+                          className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-base shadow-lg shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <span>Proceed to Next Step</span>
+                          <ArrowRight className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={saveProgressAndExit}
+                          className="w-full py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 font-semibold text-xs transition-colors active:scale-95 cursor-pointer"
+                        >
+                          Skip for Now
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -413,6 +430,23 @@ export default function Onboarding() {
                           <span>We only require pictures for your first 5 ponds to configure initial diagnosis filters.</span>
                         </div>
                       )}
+
+                      {/* Middle Proceed and Skip buttons for Step 3 */}
+                      <div className="pt-6 flex flex-col gap-2">
+                        <button
+                          onClick={handleNext}
+                          className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-base shadow-lg shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <span>Proceed to Next Step</span>
+                          <ArrowRight className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={saveProgressAndExit}
+                          className="w-full py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 font-semibold text-xs transition-colors active:scale-95 cursor-pointer"
+                        >
+                          Skip for Now
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -455,6 +489,23 @@ export default function Onboarding() {
                       <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex gap-3 text-blue-900 leading-relaxed text-xs">
                         <Info className="h-4.5 w-4.5 shrink-0 mt-0.5 text-blue-600" />
                         <span>If you aren't sure, you can skip this step. The feed calculator can estimate your stock size using a standard pond volume ratio.</span>
+                      </div>
+
+                      {/* Middle Proceed and Skip buttons for Step 4 */}
+                      <div className="pt-6 flex flex-col gap-2">
+                        <button
+                          onClick={handleNext}
+                          className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-base shadow-lg shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <span>Proceed to Next Step</span>
+                          <ArrowRight className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={saveProgressAndExit}
+                          className="w-full py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 font-semibold text-xs transition-colors active:scale-95 cursor-pointer"
+                        >
+                          Skip for Now
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -500,6 +551,23 @@ export default function Onboarding() {
                           placeholder="e.g. 150"
                           className="w-full py-4 px-5 rounded-xl border border-slate-200 bg-white text-base outline-none focus:border-primary transition-all font-semibold"
                         />
+                      </div>
+
+                      {/* Middle Proceed and Skip buttons for Step 5 */}
+                      <div className="pt-6 flex flex-col gap-2">
+                        <button
+                          onClick={completeOnboarding}
+                          className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-base shadow-lg shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <span>Complete Setup</span>
+                          <Check className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={saveProgressAndExit}
+                          className="w-full py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 font-semibold text-xs transition-colors active:scale-95 cursor-pointer"
+                        >
+                          Skip for Now
+                        </button>
                       </div>
                     </div>
                   </div>
