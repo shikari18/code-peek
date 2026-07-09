@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { PhoneShell } from "@/components/PhoneShell";
 import { 
   MapPin, Camera, ChevronRight, ChevronLeft, HelpCircle, 
-  Upload, X, Check, ArrowRight, Eye, ShieldAlert, Info
+  Upload, X, Check, ArrowRight, Eye, ShieldAlert, Info, Bell, Mic
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -21,6 +21,13 @@ export default function Onboarding() {
     return localStorage.getItem("onboarding_location") ? "granted" : "idle";
   });
   const [cameraStatus, setCameraStatus] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
+  const [notificationsStatus, setNotificationsStatus] = useState<"idle" | "requesting" | "granted" | "denied">(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      return Notification.permission === "granted" ? "granted" : Notification.permission === "denied" ? "denied" : "idle";
+    }
+    return "idle";
+  });
+  const [microphoneStatus, setMicrophoneStatus] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
   const [pondCount, setPondCount] = useState<number>(() => {
     const saved = localStorage.getItem("onboarding_pond_count");
     return saved ? parseInt(saved, 10) : 1;
@@ -73,6 +80,33 @@ export default function Onboarding() {
       stream.getTracks().forEach(track => track.stop());
     } catch {
       setCameraStatus("denied");
+    }
+  };
+
+  // Request Notifications
+  const requestNotifications = async () => {
+    setNotificationsStatus("requesting");
+    if (!("Notification" in window)) {
+      setNotificationsStatus("denied");
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationsStatus(permission === "granted" ? "granted" : "denied");
+    } catch {
+      setNotificationsStatus("denied");
+    }
+  };
+
+  // Request Microphone
+  const requestMicrophone = async () => {
+    setMicrophoneStatus("requesting");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setMicrophoneStatus("granted");
+      stream.getTracks().forEach(track => track.stop());
+    } catch {
+      setMicrophoneStatus("denied");
     }
   };
 
@@ -165,9 +199,8 @@ export default function Onboarding() {
           </button>
         </div>
 
-        {/* Form Container */}
-        <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col justify-between">
-          <div className="flex-1 flex flex-col">
+        {/* Form Container (Scrollable) */}
+        <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col">
             <AnimatePresence mode="wait">
               <motion.div
                 key={step}
@@ -183,7 +216,7 @@ export default function Onboarding() {
                     <div>
                       <h2 className="display text-3xl text-slate-800 leading-tight">Enable AI Doctor Sensors</h2>
                       <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                        Allow location and camera access to enable real-time local weather analysis and image diagnosis features.
+                        Allow permissions to unlock real-time weather analytics, video diagnosis, voice calls, and push notification alerts.
                       </p>
                     </div>
 
@@ -223,6 +256,53 @@ export default function Onboarding() {
                         </div>
                         {cameraStatus === "granted" ? <Check className="h-5 w-5 text-green-600" /> : <ChevronRight className="h-5 w-5 text-slate-300" />}
                       </button>
+
+                      <button
+                        onClick={requestNotifications}
+                        className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all ${
+                          notificationsStatus === "granted" ? "bg-green-50 border-green-200" : "bg-white border-slate-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${notificationsStatus === "granted" ? "bg-green-100" : "bg-slate-100"}`}>
+                            <Bell className={`h-5 w-5 ${notificationsStatus === "granted" ? "text-green-600" : "text-slate-500"}`} />
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-semibold text-slate-900">Enable Notifications</p>
+                            <p className="text-[11px] text-muted-foreground">For real-time farming alerts</p>
+                          </div>
+                        </div>
+                        {notificationsStatus === "granted" ? <Check className="h-5 w-5 text-green-600" /> : <ChevronRight className="h-5 w-5 text-slate-300" />}
+                      </button>
+
+                      <button
+                        onClick={requestMicrophone}
+                        className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all ${
+                          microphoneStatus === "granted" ? "bg-green-50 border-green-200" : "bg-white border-slate-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${microphoneStatus === "granted" ? "bg-green-100" : "bg-slate-100"}`}>
+                            <Mic className={`h-5 w-5 ${microphoneStatus === "granted" ? "text-green-600" : "text-slate-500"}`} />
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-semibold text-slate-900">Allow Microphone</p>
+                            <p className="text-[11px] text-muted-foreground">For hands-free AI voice assistant</p>
+                          </div>
+                        </div>
+                        {microphoneStatus === "granted" ? <Check className="h-5 w-5 text-green-600" /> : <ChevronRight className="h-5 w-5 text-slate-300" />}
+                      </button>
+
+                      {/* Main Proceed Button brought up to the middle */}
+                      <div className="pt-4">
+                        <button
+                          onClick={handleNext}
+                          className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-base shadow-lg shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <span>Proceed to Next Step</span>
+                          <ArrowRight className="h-5 w-5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -428,12 +508,12 @@ export default function Onboarding() {
             </AnimatePresence>
           </div>
 
-          {/* Navigation Controls */}
-          <div className="mt-8 pt-4 border-t border-slate-100 flex items-center justify-between shrink-0">
+          {/* Navigation Controls (Permanently Docked at Bottom) */}
+          <div className="px-6 py-4 bg-white border-t border-slate-100 flex items-center justify-between shrink-0 shadow-sm z-10">
             {step > 1 ? (
               <button
                 onClick={handleBack}
-                className="flex items-center gap-1.5 px-4 py-3 rounded-full hover:bg-slate-100 text-sm font-semibold text-muted-foreground transition-all active:scale-95"
+                className="flex items-center gap-1.5 px-4 py-3 rounded-full hover:bg-slate-100 text-sm font-semibold text-slate-600 transition-all active:scale-95 cursor-pointer"
               >
                 <ChevronLeft className="h-4.5 w-4.5" />
                 <span>Back</span>
@@ -445,21 +525,20 @@ export default function Onboarding() {
             <div className="flex gap-2">
               <button
                 onClick={saveProgressAndExit}
-                className="px-5 py-3 rounded-full hover:bg-slate-100 text-xs font-semibold text-muted-foreground transition-all active:scale-95"
+                className="px-5 py-3 rounded-full hover:bg-slate-100 text-xs font-semibold text-slate-500 transition-all active:scale-95 cursor-pointer"
               >
                 Skip for Now
               </button>
 
               <button
                 onClick={handleNext}
-                className="flex items-center gap-1.5 bg-primary hover:bg-primary-dark text-primary-foreground px-6 py-3 rounded-full text-sm font-semibold shadow-lg shadow-primary/20 transition-all active:scale-95"
+                className="flex items-center gap-1.5 bg-primary hover:bg-primary-dark text-primary-foreground px-6 py-3 rounded-full text-sm font-semibold shadow-lg shadow-primary/20 transition-all active:scale-95 cursor-pointer"
               >
                 <span>{step === 5 ? "Complete Setup" : "Next"}</span>
                 <ChevronRight className="h-4.5 w-4.5" />
               </button>
             </div>
           </div>
-        </div>
 
         {/* Explanatory Help Modal */}
         {showHelpModal && (
