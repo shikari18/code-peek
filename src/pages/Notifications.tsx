@@ -35,22 +35,33 @@ const fetchAbenaTTS = createServerFn({ method: "POST" })
     
     console.log("[ServerFn] Fetching Abena TTS server-side for text:", data.text, "voice:", data.voice);
     
-    const res = await fetch(ABENA_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${ABENA_KEY}`
-      },
-      body: JSON.stringify({ text: data.text, voice: data.voice, speed: 1.0 }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12-second timeout
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("[ServerFn] Abena API error:", res.status, errText);
-      throw new Error(`Abena AI returned status ${res.status}: ${errText}`);
+    try {
+      const res = await fetch(ABENA_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${ABENA_KEY}`
+        },
+        body: JSON.stringify({ text: data.text, voice: data.voice, speed: 1.0 }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error("[ServerFn] Abena API error:", res.status, errText);
+        throw new Error(`Abena AI returned status ${res.status}: ${errText}`);
+      }
+
+      return await res.json();
+    } catch (err) {
+      clearTimeout(timeoutId);
+      throw err;
     }
-
-    return await res.json();
   });
 
 export default function Notifications() {
@@ -82,6 +93,54 @@ export default function Notifications() {
       stopAll();
     };
   }, []);
+
+  // Background pre-fetching of TTS audio for current alerts
+  useEffect(() => {
+    if (notifications.length === 0) return;
+    
+    const lang = localStorage.getItem("selected_language") || "en";
+    if (lang === "tw" || lang === "ha") {
+      const voice = lang === "tw" ? "abena_twi_high" : "abubakar_hau";
+      
+      // Clean up old cached keys that are no longer in the active notifications list
+      try {
+        const activeIds = new Set(notifications.map(n => n.id));
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith("tts_cache_")) {
+            const id = key.replace("tts_cache_", "");
+            if (!activeIds.has(id)) {
+              keysToRemove.push(key);
+            }
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+      } catch {}
+
+      // Pre-fetch the 3 most recent alerts sequentially
+      const pending = notifications.slice(0, 3).filter(n => !localStorage.getItem(`tts_cache_${n.id}`));
+      
+      const prefetch = async () => {
+        for (const item of pending) {
+          try {
+            console.log("[AbenaAI] Background pre-fetching alert:", item.id);
+            const text = item.body.replace(/\.?\s*Click to know more\.?/gi, "").trim();
+            const data = await fetchAbenaTTS({ data: { text, voice } });
+            const b64 = data.audio_base64 || data.audio || data.audioContent;
+            if (b64) {
+              localStorage.setItem(`tts_cache_${item.id}`, b64);
+              console.log("[AbenaAI] Background cached alert:", item.id);
+            }
+          } catch (e) {
+            console.warn("[AbenaAI] Background pre-fetch failed for alert:", item.id, e);
+          }
+        }
+      };
+
+      prefetch();
+    }
+  }, [notifications]);
 
   const stopAll = () => {
     // Close WS
@@ -273,11 +332,20 @@ export default function Notifications() {
   const playAbena = async (id: string, text: string, voice: string) => {
     setLoadingId(id);
     try {
-      console.log("[AbenaAI] Requesting server-side TTS proxy...");
-      const data = await fetchAbenaTTS({ data: { text, voice } });
-      console.log("[AbenaAI] Server response received. Keys:", Object.keys(data));
+      let b64 = localStorage.getItem(`tts_cache_${id}`);
+      
+      if (!b64) {
+        console.log("[AbenaAI] Cache miss. Requesting server-side TTS proxy...");
+        const data = await fetchAbenaTTS({ data: { text, voice } });
+        console.log("[AbenaAI] Server response received. Keys:", Object.keys(data));
+        b64 = data.audio_base64 || data.audio || data.audioContent;
+        if (b64) {
+          localStorage.setItem(`tts_cache_${id}`, b64);
+        }
+      } else {
+        console.log("[AbenaAI] Cache hit! Playing instantly...");
+      }
 
-      const b64 = data.audio_base64 || data.audio || data.audioContent;
       if (!b64) throw new Error("No audio_base64 in Abena response JSON");
 
       // Decode base64 string to ArrayBuffer
