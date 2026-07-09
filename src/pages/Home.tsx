@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { PhoneShell } from "@/components/PhoneShell";
 import { Play, Calculator, Stethoscope, TrendingUp, Bell, ChevronRight, Users, ShoppingCart, BarChart2, Wifi, MessageSquare } from "lucide-react";
@@ -221,12 +221,88 @@ export default function Home() {
 }
 
 function WeatherHero() {
-  const w = getWeather();
+  const [w, setW] = useState<Weather | null>(null);
+
+  useEffect(() => {
+    const fetchWeather = async () => {
+      let lat = 5.6037; // default Accra/Volta
+      let lng = -0.1870;
+
+      const saved = localStorage.getItem("onboarding_location");
+      if (saved) {
+        try {
+          const coords = JSON.parse(saved);
+          if (coords.lat && coords.lng) {
+            lat = coords.lat;
+            lng = coords.lng;
+          }
+        } catch {}
+      }
+
+      try {
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m`);
+        if (!res.ok) throw new Error("Weather API failed");
+        const data = await res.json();
+
+        const temp = Math.round(data.current.temperature_2m);
+        const code = data.current.weather_code;
+        const wind = Math.round(data.current.wind_speed_10m);
+        const humidity = data.current.relative_humidity_2m;
+
+        let src = sunshineImg;
+        let alt = "Sunny day";
+        let headline = "Sunny Sky";
+        let detail = "Feed early — warm and clear until noon.";
+
+        const h = new Date().getHours();
+        const isNight = h >= 18 || h < 6;
+
+        if (code === 0) {
+          src = isNight ? nightImg : sunshineImg;
+          alt = isNight ? "Clear starry night sky" : "Bright sunny morning";
+          headline = isNight ? "Clear Night" : "Clear Sunny Day";
+          detail = isNight ? "Low winds. Good night conditions." : "Perfect sunlight. Ideal feeding parameters.";
+        } else if (code >= 1 && code <= 3) {
+          src = cloudyImg;
+          alt = "Overcast skies over the lake";
+          headline = code === 3 ? "Overcast" : "Partly Cloudy";
+          detail = "Cloud cover is moderate. Feed normally.";
+        } else if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
+          src = stormImg;
+          alt = "Rain clouds over the lake";
+          headline = "Rainy Conditions";
+          detail = `Precipitation active. Reduce feeding by 50% for oxygen safety. Wind: ${wind} km/h.`;
+        } else if (code >= 95) {
+          src = stormImg;
+          alt = "Thunderstorm clouds";
+          headline = "Thunderstorm Warning";
+          detail = `Severe warnings. Turn on aerators and secure lake cages. Wind: ${wind} km/h.`;
+        } else {
+          src = cloudyImg;
+          alt = "Cloudy weather";
+          headline = "Cloudy Sky";
+          detail = `Humidity at ${humidity}%. Mild wind speeds.`;
+        }
+
+        setW({ src, alt, headline, time: `${temp}°C`, detail });
+      } catch (err) {
+        console.error("Failed to fetch weather:", err);
+      }
+    };
+
+    fetchWeather();
+    const interval = setInterval(fetchWeather, 10 * 60 * 1000); // 10 min
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fallback to static briefing during loading or error
+  const activeWeather = w || getWeather();
+
   return (
     <div className="mt-8 mx-4 rounded-2xl overflow-hidden relative border border-border/70 min-h-[180px]">
       <img
-        src={w.src}
-        alt={w.alt}
+        src={activeWeather.src}
+        alt={activeWeather.alt}
         width={768}
         height={512}
         loading="lazy"
@@ -234,9 +310,9 @@ function WeatherHero() {
       />
       <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
       <div className="relative z-10 p-6 pr-32 text-white">
-        <p className="text-sm font-medium opacity-90">{w.headline}</p>
-        <p className="display text-5xl mt-1">{w.time}</p>
-        <p className="text-sm mt-3 opacity-80 max-w-[200px]">{w.detail}</p>
+        <p className="text-sm font-medium opacity-90">{activeWeather.headline}</p>
+        <p className="display text-5xl mt-1">{activeWeather.time}</p>
+        <p className="text-sm mt-3 opacity-80 max-w-[200px]">{activeWeather.detail}</p>
       </div>
     </div>
   );

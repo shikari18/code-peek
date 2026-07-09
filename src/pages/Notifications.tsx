@@ -39,13 +39,48 @@ const fetchAbenaTTS = createServerFn({ method: "POST" })
     const timeoutId = setTimeout(() => controller.abort(), 12000); // 12-second timeout
 
     try {
+      let textToSpeak = data.text;
+      const isTwi = data.voice.includes("twi");
+      const isHausa = data.voice.includes("hau");
+
+      if (isTwi || isHausa) {
+        const geminiKey = process.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || "";
+        if (geminiKey) {
+          try {
+            const targetLang = isTwi ? "Twi (Akan)" : "Hausa";
+            const prompt = `Translate the following short fish farm alert message to fluent, natural ${targetLang}. Keep it conversational and easy to understand when spoken aloud. Output ONLY the translation, no explanation or notes:\n\n"${data.text}"`;
+            
+            const transRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.2 }
+              }),
+              signal: controller.signal
+            });
+            
+            if (transRes.ok) {
+              const transJson = await transRes.json();
+              const translated = transJson.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+              if (translated) {
+                console.log(`[ServerFn] Translated alert to ${targetLang}: "${translated}"`);
+                textToSpeak = translated;
+              }
+            }
+          } catch (e) {
+            console.warn("[ServerFn] Translation failed, using original English:", e);
+          }
+        }
+      }
+
       const res = await fetch(ABENA_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${ABENA_KEY}`
         },
-        body: JSON.stringify({ text: data.text, voice: data.voice, speed: 1.0 }),
+        body: JSON.stringify({ text: textToSpeak, voice: data.voice, speed: 1.0 }),
         signal: controller.signal
       });
 
@@ -397,9 +432,6 @@ export default function Notifications() {
       console.error("[AbenaAI] failed:", e);
       setLoadingId(null);
       setPlayingId(null);
-      // Fallback to browser TTS (English) on failure
-      const lang = localStorage.getItem("selected_language") || "en";
-      playBrowserTTS(id, text, lang);
     }
   };
 
