@@ -358,9 +358,9 @@ export default function Notifications() {
     const text = body.replace(/\.?\s*Click to know more\.?/gi, "").trim();
 
     if (lang === "tw") {
-      playAbena(id, text, "abena_twi");   // Abena High — Twi (Akan)
+      playAbena(id, text, "abena_twi_high");   // Abena High — Twi (Akan)
     } else if (lang === "ha") {
-      playAbena(id, text, "abubakar");
+      playAbena(id, text, "abubakar_hau");     // Abubakar — Hausa
     } else {
       playGemini(id, text);
     }
