@@ -1,11 +1,30 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Fingerprint, Shield, CheckCircle2 } from "lucide-react";
 
 export default function SignIn() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [showPw, setShowPw] = useState(false);
   const [, navigate] = useLocation();
+
+  const [scanning, setScanning] = useState(false);
+  const [scanSuccess, setScanSuccess] = useState(false);
+  const biometricsEnabled = localStorage.getItem("security_biometrics") === "true";
+  const biometricMethod = localStorage.getItem("security_biometrics_method") as "fingerprint" | "face_id" | null;
+
+  const handleBiometricLogin = () => {
+    setScanning(true);
+    setScanSuccess(false);
+    setTimeout(() => {
+      setScanSuccess(true);
+      setTimeout(() => {
+        setScanning(false);
+        // Successful login
+        localStorage.setItem("onboarding_completed", "true");
+        navigate("/home");
+      }, 1000);
+    }, 2000);
+  };
 
   return (
     <div className="min-h-screen w-full flex justify-center">
@@ -85,17 +104,37 @@ export default function SignIn() {
 
           <button
             type="submit"
-            className="w-full mt-2 py-4 rounded-full bg-primary text-primary-foreground font-medium flex items-center justify-center gap-2 shadow-lg"
+            className="w-full mt-2 py-4 rounded-full bg-primary text-primary-foreground font-medium flex items-center justify-center gap-2 shadow-lg cursor-pointer"
           >
             {mode === "signin" ? "Sign in" : "Create account"} <ArrowRight className="h-4 w-4" />
           </button>
+
+          {mode === "signin" && biometricsEnabled && biometricMethod && (
+            <button
+              type="button"
+              onClick={handleBiometricLogin}
+              className="w-full mt-3 py-3.5 rounded-full border border-border/80 bg-white hover:bg-slate-50 text-slate-800 font-semibold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95 cursor-pointer"
+            >
+              {biometricMethod === "face_id" ? (
+                <>
+                  <Shield className="h-4.5 w-4.5 text-primary" />
+                  <span>Sign in with Face ID</span>
+                </>
+              ) : (
+                <>
+                  <Fingerprint className="h-4.5 w-4.5 text-primary" />
+                  <span>Sign in with Fingerprint</span>
+                </>
+              )}
+            </button>
+          )}
         </form>
 
         <p className="mt-auto pt-8 text-center text-sm text-muted-foreground">
           {mode === "signin" ? "New here?" : "Already have an account?"}{" "}
           <button
             onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-            className="text-foreground font-medium underline underline-offset-4"
+            className="text-foreground font-medium underline underline-offset-4 cursor-pointer"
           >
             {mode === "signin" ? "Create account" : "Sign in"}
           </button>
@@ -104,6 +143,28 @@ export default function SignIn() {
           Change language
         </Link>
       </div>
+
+      {/* ── Biometric Scanning Overlay ── */}
+      {scanning && (
+        <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex flex-col items-center justify-center text-white px-6 text-center">
+          <div className="relative h-28 w-28 flex items-center justify-center rounded-full bg-primary/10 border border-primary/20 mb-8">
+            <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+            {scanSuccess ? (
+              <CheckCircle2 className="h-14 w-14 text-green-500 animate-bounce" />
+            ) : biometricMethod === "face_id" ? (
+              <Shield className="h-14 w-14 text-primary animate-pulse" />
+            ) : (
+              <Fingerprint className="h-14 w-14 text-primary animate-pulse" />
+            )}
+          </div>
+          <h3 className="text-xl font-bold tracking-tight">
+            {scanSuccess ? "Authentication Success" : biometricMethod === "face_id" ? "Verifying Face ID..." : "Scanning Fingerprint..."}
+          </h3>
+          <p className="text-sm text-slate-400 mt-2">
+            {scanSuccess ? "Redirecting to your dashboard..." : biometricMethod === "face_id" ? "Please look directly at your screen" : "Place your finger on the fingerprint reader"}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

@@ -117,6 +117,12 @@ export default function FishDoctor() {
   const runAnalysis = () => {
     setLoading(true);
     setDiagnosis(null);
+
+    // Increment AI usage prompt count
+    const currentPrompts = parseInt(localStorage.getItem("usage_prompts_count") || "0", 10);
+    localStorage.setItem("usage_prompts_count", String(currentPrompts + 1));
+    window.dispatchEvent(new Event("usage_updated"));
+
     setTimeout(() => {
       setLoading(false);
       const result = DIAGNOSES[activeSymptom] || DIAGNOSES["Other"];

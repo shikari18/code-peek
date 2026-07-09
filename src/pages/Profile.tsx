@@ -40,6 +40,7 @@ export default function Profile() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [biometricsEnabled, setBiometricsEnabled] = useState(() => localStorage.getItem("security_biometrics") === "true");
+  const [showBiometricChoice, setShowBiometricChoice] = useState(false);
 
   // Subscription states
   const [subscriptionTier, setSubscriptionTier] = useState(() => localStorage.getItem("subscription_tier") || "Free Plan");
@@ -49,9 +50,9 @@ export default function Profile() {
     const stored = localStorage.getItem("billing_invoices");
     if (stored) return JSON.parse(stored);
     const defaults = [
-      { id: "INV-2026-001", date: "July 1, 2026", amount: "$29.00", status: "Paid" as const },
-      { id: "INV-2026-002", date: "June 1, 2026", amount: "$29.00", status: "Paid" as const },
-      { id: "INV-2026-003", date: "May 1, 2026", amount: "$29.00", status: "Paid" as const },
+      { id: "INV-2026-001", date: "July 1, 2026", amount: "120 GHS", status: "Paid" as const },
+      { id: "INV-2026-002", date: "June 1, 2026", amount: "120 GHS", status: "Paid" as const },
+      { id: "INV-2026-003", date: "May 1, 2026", amount: "120 GHS", status: "Paid" as const },
     ];
     localStorage.setItem("billing_invoices", JSON.stringify(defaults));
     return defaults;
@@ -111,12 +112,27 @@ export default function Profile() {
   };
 
   const handleBiometricsToggle = () => {
-    const nextVal = !biometricsEnabled;
-    setBiometricsEnabled(nextVal);
-    localStorage.setItem("security_biometrics", String(nextVal));
+    if (biometricsEnabled) {
+      setBiometricsEnabled(false);
+      localStorage.setItem("security_biometrics", "false");
+      localStorage.removeItem("security_biometrics_method");
+      toast({
+        title: "Security Updated",
+        description: "Biometric login disabled."
+      });
+    } else {
+      setShowBiometricChoice(true);
+    }
+  };
+
+  const handleSelectBiometricMethod = (method: "fingerprint" | "face_id") => {
+    setBiometricsEnabled(true);
+    localStorage.setItem("security_biometrics", "true");
+    localStorage.setItem("security_biometrics_method", method);
+    setShowBiometricChoice(false);
     toast({
-      title: "Security Updated",
-      description: nextVal ? "Biometrics (Face ID/Fingerprint) enabled." : "Biometrics disabled."
+      title: "Biometrics Enabled",
+      description: `Configured login using ${method === "face_id" ? "Face ID" : "Fingerprint"}.`
     });
   };
 
@@ -416,25 +432,54 @@ export default function Profile() {
                     </button>
                   </div>
                   
-                  <div className="pt-4 border-t border-border/50">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-full bg-surface border border-border/70 grid place-items-center text-muted-foreground">
-                          <Fingerprint className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold tracking-tight">Biometric Login</p>
-                          <p className="text-xs text-muted-foreground">Use Face ID or Fingerprint</p>
-                        </div>
+                  {showBiometricChoice ? (
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 mt-4 space-y-4 animate-fade-in">
+                      <p className="text-sm font-bold text-foreground">Choose Biometric Method</p>
+                      <p className="text-xs text-muted-foreground">Select the default method you want to configure for logging into Volta Lake Farm.</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleSelectBiometricMethod("fingerprint")}
+                          className="flex-1 py-3 rounded-xl border border-border bg-white text-sm font-semibold hover:border-primary active:scale-95 transition-all text-slate-800 flex flex-col items-center justify-center gap-2"
+                        >
+                          <Fingerprint className="h-6 w-6 text-primary" />
+                          <span>Fingerprint</span>
+                        </button>
+                        <button
+                          onClick={() => handleSelectBiometricMethod("face_id")}
+                          className="flex-1 py-3 rounded-xl border border-border bg-white text-sm font-semibold hover:border-primary active:scale-95 transition-all text-slate-800 flex flex-col items-center justify-center gap-2"
+                        >
+                          <Shield className="h-6 w-6 text-primary" />
+                          <span>Face ID</span>
+                        </button>
                       </div>
                       <button
-                        onClick={handleBiometricsToggle}
-                        className={`w-12 h-6 rounded-full transition-colors duration-200 relative ${biometricsEnabled ? "bg-primary" : "bg-slate-200"}`}
+                        onClick={() => setShowBiometricChoice(false)}
+                        className="w-full py-2.5 rounded-full border border-border text-xs font-semibold text-muted-foreground hover:bg-slate-100 transition-colors"
                       >
-                        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-all duration-200 ${biometricsEnabled ? "left-6" : "left-0.5"}`} />
+                        Cancel
                       </button>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="pt-4 border-t border-border/50">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-full bg-surface border border-border/70 grid place-items-center text-muted-foreground">
+                            <Fingerprint className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold tracking-tight">Biometric Login</p>
+                            <p className="text-xs text-muted-foreground">Use Face ID or Fingerprint</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={handleBiometricsToggle}
+                          className={`w-12 h-6 rounded-full transition-colors duration-200 relative ${biometricsEnabled ? "bg-primary" : "bg-slate-200"}`}
+                        >
+                          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-all duration-200 ${biometricsEnabled ? "left-6" : "left-0.5"}`} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -468,7 +513,7 @@ export default function Profile() {
                     {/* Pro Plan */}
                     <div className={`p-4 rounded-2xl border transition-all flex items-center justify-between ${subscriptionTier === "Pro Plan" ? "border-primary bg-primary/5" : "border-border bg-white"}`}>
                       <div>
-                        <p className="font-bold text-sm text-foreground">Pro Plan ($29/mo)</p>
+                        <p className="font-bold text-sm text-foreground">Pro Plan (120 GHS/mo)</p>
                         <p className="text-xs text-muted-foreground mt-0.5">Real-time local weather & advanced AI calls.</p>
                       </div>
                       <button
@@ -483,7 +528,7 @@ export default function Profile() {
                     {/* Enterprise Plan */}
                     <div className={`p-4 rounded-2xl border transition-all flex items-center justify-between ${subscriptionTier === "Enterprise Plan" ? "border-primary bg-primary/5" : "border-border bg-white"}`}>
                       <div>
-                        <p className="font-bold text-sm text-foreground">Enterprise ($99/mo)</p>
+                        <p className="font-bold text-sm text-foreground">Enterprise (390 GHS/mo)</p>
                         <p className="text-xs text-muted-foreground mt-0.5">Multi-farm coordination & dedicated AI parameters.</p>
                       </div>
                       <button

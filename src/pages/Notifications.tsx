@@ -27,7 +27,7 @@ const iconMap: Record<string, any> = {
 const GEMINI_MODEL = "models/gemini-3.1-flash-live-preview";
 
 const fetchAbenaTTS = createServerFn({ method: "POST" })
-  .validator((d: { text: string; voice: string }) => d)
+  .validator((d: { text: string; voice: string; geminiApiKey: string }) => d)
   .handler(async ({ data }) => {
     "use server";
     const ABENA_KEY = "sk_efe453b8d2774a22975cb14de4c4a5b9";
@@ -36,7 +36,7 @@ const fetchAbenaTTS = createServerFn({ method: "POST" })
     console.log("[ServerFn] Fetching Abena TTS server-side for text:", data.text, "voice:", data.voice);
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12-second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 12500); // 12.5-second timeout
 
     try {
       let textToSpeak = data.text;
@@ -44,18 +44,19 @@ const fetchAbenaTTS = createServerFn({ method: "POST" })
       const isHausa = data.voice.includes("hau");
 
       if (isTwi || isHausa) {
-        const geminiKey = process.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || "";
+        const geminiKey = data.geminiApiKey || process.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || "";
         if (geminiKey) {
           try {
             const targetLang = isTwi ? "Twi (Akan)" : "Hausa";
-            const prompt = `Translate the following short fish farm alert message to fluent, natural ${targetLang}. Keep it conversational and easy to understand when spoken aloud. Output ONLY the translation, no explanation or notes:\n\n"${data.text}"`;
+            // Strict prompt: remove English from the API key output
+            const prompt = `Translate this aquaculture alert into fluent, pure ${targetLang} language. Do not mix English words in it; use native ${targetLang} terms where possible. Output ONLY the translation, no explanation or notes:\n\n"${data.text}"`;
             
             const transRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.2 }
+                generationConfig: { temperature: 0.1 }
               }),
               signal: controller.signal
             });
@@ -161,7 +162,8 @@ export default function Notifications() {
           try {
             console.log("[AbenaAI] Background pre-fetching alert:", item.id);
             const text = item.body.replace(/\.?\s*Click to know more\.?/gi, "").trim();
-            const data = await fetchAbenaTTS({ data: { text, voice } });
+            const geminiApiKey = localStorage.getItem("gemini_live_api_key") || import.meta.env.VITE_GEMINI_API_KEY || "";
+            const data = await fetchAbenaTTS({ data: { text, voice, geminiApiKey } });
             const b64 = data.audio_base64 || data.audio || data.audioContent;
             if (b64) {
               localStorage.setItem(`tts_cache_${item.id}`, b64);
@@ -371,7 +373,8 @@ export default function Notifications() {
       
       if (!b64) {
         console.log("[AbenaAI] Cache miss. Requesting server-side TTS proxy...");
-        const data = await fetchAbenaTTS({ data: { text, voice } });
+        const geminiApiKey = localStorage.getItem("gemini_live_api_key") || import.meta.env.VITE_GEMINI_API_KEY || "";
+        const data = await fetchAbenaTTS({ data: { text, voice, geminiApiKey } });
         console.log("[AbenaAI] Server response received. Keys:", Object.keys(data));
         b64 = data.audio_base64 || data.audio || data.audioContent;
         if (b64) {
@@ -453,6 +456,11 @@ export default function Notifications() {
   const handlePlay = (id: string, body: string) => {
     if (playingId === id || loadingId === id) { stopAll(); return; }
     stopAll();
+
+    // Increment notification played count
+    const currentNotif = parseInt(localStorage.getItem("usage_notifications_count") || "0", 10);
+    localStorage.setItem("usage_notifications_count", String(currentNotif + 1));
+    window.dispatchEvent(new Event("usage_updated"));
 
     const lang = localStorage.getItem("selected_language") || "en";
     const text = body.replace(/\.?\s*Click to know more\.?/gi, "").trim();

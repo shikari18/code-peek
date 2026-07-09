@@ -29,6 +29,11 @@ export default function FarmerChat() {
   const handleSend = () => {
     if (!inputText.trim()) return;
 
+    // Increment usage prompt count
+    const currentPrompts = parseInt(localStorage.getItem("usage_prompts_count") || "0", 10);
+    localStorage.setItem("usage_prompts_count", String(currentPrompts + 1));
+    window.dispatchEvent(new Event("usage_updated"));
+
     const newMsg: Message = {
       id: Math.random().toString(),
       sender: "Emmanuel (You)",

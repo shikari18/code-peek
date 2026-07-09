@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { AnimatePresence } from "framer-motion";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Shield } from "lucide-react";
 import { AnimatedPage } from "@/components/AnimatedPage";
 import { BottomNav } from "@/components/BottomNav";
 import Home from "@/pages/Home";
@@ -39,6 +40,67 @@ function wrap(Component: React.ComponentType) {
 function AppShell() {
   const [location] = useLocation();
   const showNav = !NO_NAV_ROUTES.has(location);
+
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [promptCount, setPromptCount] = useState(0);
+  const [notifCount, setNotifCount] = useState(0);
+
+  const checkBlockStatus = () => {
+    const onboardingCompleted = localStorage.getItem("onboarding_completed") === "true";
+    if (!onboardingCompleted || NO_NAV_ROUTES.has(location)) {
+      setIsBlocked(false);
+      return;
+    }
+
+    const currentTier = localStorage.getItem("subscription_tier") || "Free Plan";
+    const isPremium = currentTier === "Pro Plan" || currentTier === "Enterprise Plan";
+    if (isPremium) {
+      setIsBlocked(false);
+      return;
+    }
+
+    const pCount = parseInt(localStorage.getItem("usage_prompts_count") || "0", 10);
+    const nCount = parseInt(localStorage.getItem("usage_notifications_count") || "0", 10);
+    setPromptCount(pCount);
+    setNotifCount(nCount);
+
+    if (pCount >= 19 || nCount >= 6) {
+      setIsBlocked(true);
+    } else {
+      setIsBlocked(false);
+    }
+  };
+
+  useEffect(() => {
+    checkBlockStatus();
+  }, [location]);
+
+  useEffect(() => {
+    const handleUsageUpdated = () => checkBlockStatus();
+    window.addEventListener("usage_updated", handleUsageUpdated);
+    window.addEventListener("subscription_updated", handleUsageUpdated);
+    return () => {
+      window.removeEventListener("usage_updated", handleUsageUpdated);
+      window.removeEventListener("subscription_updated", handleUsageUpdated);
+    };
+  }, []);
+
+  const handlePayGHS = () => {
+    localStorage.setItem("subscription_tier", "Pro Plan");
+    localStorage.setItem("usage_prompts_count", "0");
+    localStorage.setItem("usage_notifications_count", "0");
+    window.dispatchEvent(new Event("subscription_updated"));
+    setIsBlocked(false);
+  };
+
+  const handleSignOutPaywall = () => {
+    const langPref = localStorage.getItem("selected_language");
+    localStorage.clear();
+    if (langPref) localStorage.setItem("selected_language", langPref);
+    setIsBlocked(false);
+    window.history.pushState({}, "", "/");
+    window.dispatchEvent(new Event("popstate"));
+  };
 
   useEffect(() => {
     // Request notification permission on startup
@@ -146,6 +208,38 @@ function AppShell() {
           </Switch>
         </AnimatePresence>
         {showNav && <BottomNav />}
+        
+        {/* ── Paywall Overlay ── */}
+        {isBlocked && (
+          <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-md z-[100] flex flex-col justify-center px-6 text-center text-white animate-fade-in">
+            <div className="mx-auto h-16 w-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500 mb-6">
+              <Shield className="h-8 w-8" />
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight">Usage Limit Reached</h2>
+            <p className="text-sm text-slate-400 mt-3 leading-relaxed">
+              You have completed {promptCount}/19 assistant prompts or played {notifCount}/6 voice alerts on the Free Plan.
+            </p>
+            <div className="mt-8 p-5 rounded-2xl bg-white/5 border border-white/10 text-left">
+              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold font-mono">Premium Subscription</p>
+              <p className="text-xl font-bold text-white mt-1">120 GHS / month</p>
+              <p className="text-xs text-slate-400 mt-2">Unlock unlimited calculations, premium weather forecasting, and persistent voice calls.</p>
+            </div>
+            <div className="mt-10 flex flex-col gap-3">
+              <button
+                onClick={handlePayGHS}
+                className="w-full py-4 rounded-full bg-primary text-primary-foreground font-semibold shadow-lg shadow-primary/20 active:scale-95 transition-all text-sm cursor-pointer"
+              >
+                Pay 120 GHS
+              </button>
+              <button
+                onClick={handleSignOutPaywall}
+                className="w-full py-4 rounded-full border border-white/20 hover:bg-white/5 text-white font-medium active:scale-95 transition-all text-sm cursor-pointer"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

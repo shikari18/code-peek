@@ -58,6 +58,12 @@ export default function FeedCalculator() {
       percentBiomass,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ", " + new Date().toLocaleDateString([], { month: 'short', day: 'numeric' }),
     };
+
+    // Increment AI usage prompt count
+    const currentPrompts = parseInt(localStorage.getItem("usage_prompts_count") || "0", 10);
+    localStorage.setItem("usage_prompts_count", String(currentPrompts + 1));
+    window.dispatchEvent(new Event("usage_updated"));
+
     const updated = [newRecord, ...history];
     setHistory(updated);
     localStorage.setItem("feed_calculations", JSON.stringify(updated));

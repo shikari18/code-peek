@@ -749,6 +749,11 @@ You know exactly what page the user is on (they are on the AI voice call assista
             console.log("[GeminiLive] Triggering initial greeting...");
             if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
               wsRef.current.send(JSON.stringify(greetingPrompt));
+              
+              // Increment AI assistant usage prompt count
+              const currentPrompts = parseInt(localStorage.getItem("usage_prompts_count") || "0", 10);
+              localStorage.setItem("usage_prompts_count", String(currentPrompts + 1));
+              window.dispatchEvent(new Event("usage_updated"));
             }
             
             // Start recording user audio input
