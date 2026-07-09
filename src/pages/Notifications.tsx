@@ -44,11 +44,13 @@ const fetchAbenaTTS = createServerFn({ method: "POST" })
       const isHausa = data.voice.includes("hau");
 
       if (isTwi || isHausa) {
+        let translatedText = "";
         const geminiKey = data.geminiApiKey || process.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || "";
+        
+        // 1. Try Gemini Translation
         if (geminiKey) {
           try {
             const targetLang = isTwi ? "Twi (Akan)" : "Hausa";
-            // Strict prompt: remove English from the API key output
             const prompt = `Translate this aquaculture alert into fluent, pure ${targetLang} language. Do not mix English words in it; use native ${targetLang} terms where possible. Output ONLY the translation, no explanation or notes:\n\n"${data.text}"`;
             
             const transRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
@@ -65,12 +67,50 @@ const fetchAbenaTTS = createServerFn({ method: "POST" })
               const transJson = await transRes.json();
               const translated = transJson.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
               if (translated) {
-                console.log(`[ServerFn] Translated alert to ${targetLang}: "${translated}"`);
-                textToSpeak = translated;
+                console.log(`[ServerFn] Translated alert via Gemini to ${targetLang}: "${translated}"`);
+                translatedText = translated;
               }
             }
           } catch (e) {
-            console.warn("[ServerFn] Translation failed, using original English:", e);
+            console.warn("[ServerFn] Gemini translation failed:", e);
+          }
+        }
+
+        // 2. Try MyMemory Translation Fallback if Gemini key is missing or failed
+        if (!translatedText) {
+          try {
+            const langCode = isTwi ? "ak" : "ha";
+            console.log(`[ServerFn] Running fallback MyMemory translation for en|${langCode}...`);
+            const myMemoryRes = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(data.text)}&langpair=en|${langCode}`, {
+              signal: controller.signal
+            });
+            if (myMemoryRes.ok) {
+              const myMemoryJson = await myMemoryRes.json();
+              const translated = myMemoryJson.responseData?.translatedText?.trim();
+              if (translated && !translated.toLowerCase().includes("mymemory warning")) {
+                console.log(`[ServerFn] Translated alert via MyMemory to ${langCode}: "${translated}"`);
+                translatedText = translated;
+              }
+            }
+          } catch (e) {
+            console.warn("[ServerFn] MyMemory translation failed:", e);
+          }
+        }
+
+        if (translatedText) {
+          textToSpeak = translatedText;
+        } else {
+          // If translation failed completely, use a hardcoded basic Twi conversion or mock to ensure no English
+          if (isTwi) {
+            if (data.text.includes("Rain") || data.text.includes("weather")) {
+              textToSpeak = "Nsuo bɛtɔ nnansa yi ara. Mepa wo kyɛw tweso aduane no so.";
+            } else if (data.text.includes("oxygen") || data.text.includes("DO")) {
+              textToSpeak = "Mepa wo kyɛw mframa no so retew wɔ nsukoraa mmienu mu. Sɔ mframa afiri no anaa aerator no anɔpa yi ara.";
+            } else if (data.text.includes("wholesale") || data.text.includes("Price")) {
+              textToSpeak = "Tilapia boɔ akɔ soro nnɛ wɔ Accra dwam.";
+            } else if (data.text.includes("feeding") || data.text.includes("calculate") || data.text.includes("Reminder")) {
+              textToSpeak = "Ɛberɛ adu so sɛ wobu aduane gu afiri mmiensa no mu.";
+            }
           }
         }
       }

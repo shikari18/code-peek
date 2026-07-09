@@ -524,21 +524,6 @@ export default function Profile() {
                         {subscriptionTier === "Pro Plan" ? "Active" : "Upgrade"}
                       </button>
                     </div>
-
-                    {/* Enterprise Plan */}
-                    <div className={`p-4 rounded-2xl border transition-all flex items-center justify-between ${subscriptionTier === "Enterprise Plan" ? "border-primary bg-primary/5" : "border-border bg-white"}`}>
-                      <div>
-                        <p className="font-bold text-sm text-foreground">Enterprise (390 GHS/mo)</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">Multi-farm coordination & dedicated AI parameters.</p>
-                      </div>
-                      <button
-                        disabled={subscriptionTier === "Enterprise Plan"}
-                        onClick={() => handleUpgrade("Enterprise Plan")}
-                        className={`px-4 py-2 rounded-full text-xs font-semibold ${subscriptionTier === "Enterprise Plan" ? "bg-slate-100 text-slate-400" : "bg-primary text-primary-foreground shadow active:scale-95 transition-all"}`}
-                      >
-                        {subscriptionTier === "Enterprise Plan" ? "Active" : "Upgrade"}
-                      </button>
-                    </div>
                   </div>
                 </div>
               )}
