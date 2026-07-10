@@ -87,10 +87,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:image:height", content: "512" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:image", content: "/fish-logo.png" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "FishFarm OS" },
+      { name: "theme-color", content: "#0f172a" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/fish-logo.png", type: "image/png" },
+      { rel: "manifest", href: "/manifest.json" },
+      { rel: "apple-touch-icon", href: "/fish-logo.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {

@@ -1,0 +1,18 @@
+{
+  "name": "FishFarm OS",
+  "short_name": "FishFarmOS",
+  "description": "Smart mobile operating system for modern fish farmers.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/fish-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
