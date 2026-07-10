@@ -62,12 +62,20 @@ export default function SignIn() {
   }, []);
 
   const handleGoogleClick = () => {
-    const customClientId = localStorage.getItem("google_client_id") || import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
-    const redirectUri = `${window.location.origin}/signin`;
+    let clientId = localStorage.getItem("google_client_id") || import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
     
-    const url = customClientId 
-      ? `https://accounts.google.com/o/oauth2/v2/auth?client_id=${customClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=openid%20profile%20email`
-      : "/auth/google-chooser";
+    if (!clientId) {
+      const input = prompt(
+        "To use real Google Authentication, please enter your Google Cloud Console OAuth Client ID:\n\n(Ensure you've added your current host to Authorized JavaScript Origins and Redirect URIs in GCP Console)",
+        ""
+      );
+      if (!input) return;
+      clientId = input.trim();
+      localStorage.setItem("google_client_id", clientId);
+    }
+
+    const redirectUri = `${window.location.origin}/signin`;
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=openid%20profile%20email`;
 
     const width = 500;
     const height = 650;
