@@ -30,61 +30,35 @@ export default function SignIn() {
   const [showGoogleOverlay, setShowGoogleOverlay] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    const initGoogle = () => {
-      if (!active) return;
-      if (window.google?.accounts?.id) {
-        const client_id = import.meta.env.VITE_GOOGLE_CLIENT_ID || localStorage.getItem("google_client_id") || "950337583648-52mep6h49s1sh1m0f58r6hsmj9sde4a4.apps.googleusercontent.com";
-        
-        window.google.accounts.id.initialize({
-          client_id: client_id,
-          callback: (response: any) => {
-            const payload = decodeJwt(response.credential);
-            if (payload) {
-              localStorage.setItem("google_authenticated", "true");
-              localStorage.setItem("profile_full_name", payload.name || "Emmanuel Mensah");
-              localStorage.setItem("profile_email", payload.email);
-              if (payload.picture) {
-                localStorage.setItem("profile_image_url", payload.picture);
-              }
-              localStorage.setItem("onboarding_completed", "false");
-              navigate("/onboarding");
-            }
-          }
-        });
-
-        const btnEl = document.getElementById("google-signin-btn");
-        if (btnEl) {
-          window.google.accounts.id.renderButton(btnEl, {
-            theme: "outline",
-            size: "large",
-            width: btnEl.clientWidth || 380,
-            text: "continue_with",
-            shape: "circle"
-          });
+  const handleGoogleClick = () => {
+    const width = 500;
+    const height = 600;
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+    
+    const popup = window.open(
+      "/auth/google-chooser",
+      "Google Sign-In",
+      `width=${width},height=${height},top=${top},left=${left},status=no,resizable=yes`
+    );
+    
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "GOOGLE_AUTH_SUCCESS") {
+        const { name, email, picture } = event.data;
+        localStorage.setItem("google_authenticated", "true");
+        localStorage.setItem("profile_full_name", name);
+        localStorage.setItem("profile_email", email);
+        if (picture) {
+          localStorage.setItem("profile_image_url", picture);
         }
-      } else {
-        setTimeout(initGoogle, 250);
+        localStorage.setItem("onboarding_completed", "false");
+        
+        window.removeEventListener("message", handleMessage);
+        navigate("/onboarding");
       }
     };
-
-    initGoogle();
-    return () => { active = false; };
-  }, []);
-
-  const handleGoogleAccountSelect = (name: string, email: string) => {
-    setGoogleLoading(true);
-    setTimeout(() => {
-      setGoogleLoading(false);
-      setShowGoogleOverlay(false);
-      // Save details to localStorage so they are real
-      localStorage.setItem("google_authenticated", "true");
-      localStorage.setItem("profile_full_name", name);
-      localStorage.setItem("profile_email", email);
-      localStorage.setItem("onboarding_completed", "false"); // let them complete onboarding first
-      navigate("/onboarding");
-    }, 1500);
+    
+    window.addEventListener("message", handleMessage);
   };
 
   const biometricsEnabled = localStorage.getItem("security_biometrics") === "true";
@@ -122,22 +96,14 @@ export default function SignIn() {
         </p>
 
         <div className="mt-8 space-y-3">
-          <div className="w-full flex flex-col items-center gap-1.5">
-            <div id="google-signin-btn" className="w-full flex justify-center min-h-[44px]" />
-            <button
-              type="button"
-              onClick={() => {
-                const id = prompt("Enter your Google Cloud OAuth Client ID:", localStorage.getItem("google_client_id") || "");
-                if (id !== null) {
-                  localStorage.setItem("google_client_id", id.trim());
-                  window.location.reload();
-                }
-              }}
-              className="text-[10px] text-center text-slate-400 hover:text-slate-600 underline cursor-pointer"
-            >
-              Configure Custom Google Client ID
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleGoogleClick}
+            className="w-full py-3.5 rounded-full bg-white border border-border/70 flex items-center justify-center gap-3 font-medium text-[15px] shadow-sm hover:bg-slate-50 transition-colors cursor-pointer text-slate-800"
+          >
+            <GoogleIcon />
+            Continue with Google
+          </button>
           <button type="button" onClick={() => navigate("/onboarding")} className="w-full py-3.5 rounded-full bg-black text-white flex items-center justify-center gap-3 font-medium text-[15px] shadow-sm cursor-pointer">
             <AppleIcon />
             Continue with Apple

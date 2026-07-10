@@ -22,10 +22,11 @@ import CreditScore from "@/pages/CreditScore";
 import PondDevice from "@/pages/PondDevice";
 import FarmerChat from "@/pages/FarmerChat";
 import NotFound from "@/pages/not-found";
+import GoogleChooser from "@/pages/GoogleChooser";
 
 const queryClient = new QueryClient();
 
-const NO_NAV_ROUTES = new Set(["/", "/welcome", "/signin", "/onboarding"]);
+const NO_NAV_ROUTES = new Set(["/", "/welcome", "/signin", "/onboarding", "/auth/google-chooser"]);
 
 function wrap(Component: React.ComponentType) {
   return function WrappedPage() {
@@ -219,6 +220,7 @@ function AppShell() {
             <Route path="/signin" component={wrap(SignIn)} />
             <Route path="/welcome" component={wrap(Welcome)} />
             <Route path="/onboarding" component={wrap(Onboarding)} />
+            <Route path="/auth/google-chooser" component={wrap(GoogleChooser)} />
             <Route path="/community-buying" component={wrap(CommunityBuying)} />
             <Route path="/harvest-marketplace" component={wrap(HarvestMarketplace)} />
             <Route path="/credit-score" component={wrap(CreditScore)} />
