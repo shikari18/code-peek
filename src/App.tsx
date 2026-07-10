@@ -48,11 +48,11 @@ function AppShell() {
     const onboardingCompleted = localStorage.getItem("onboarding_completed") === "true";
     
     if (!hasLang) {
-      if (location !== "/" && location !== "/welcome") {
+      if (location !== "/" && location !== "/welcome" && location !== "/auth/google-chooser") {
         navigate("/", { replace: true });
       }
     } else if (!onboardingCompleted) {
-      if (location !== "/" && location !== "/welcome" && location !== "/signin" && location !== "/onboarding") {
+      if (location !== "/" && location !== "/welcome" && location !== "/signin" && location !== "/onboarding" && location !== "/auth/google-chooser") {
         navigate("/signin", { replace: true });
       }
     }
