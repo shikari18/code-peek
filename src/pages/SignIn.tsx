@@ -30,23 +30,58 @@ export default function SignIn() {
   const [showGoogleOverlay, setShowGoogleOverlay] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  useEffect(() => {
+    // Check if we are running in the Google OAuth redirect popup
+    if (window.opener && window.location.hash) {
+      const hash = window.location.hash.substring(1);
+      const params = new URLSearchParams(hash);
+      const accessToken = params.get("access_token");
+      
+      if (accessToken) {
+        // Fetch real user metadata from Google's userinfo endpoint
+        fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`)
+          .then((res) => res.json())
+          .then((data) => {
+            window.opener.postMessage(
+              {
+                type: "GOOGLE_AUTH_SUCCESS",
+                name: data.name,
+                email: data.email,
+                picture: data.picture
+              },
+              window.location.origin
+            );
+            window.close();
+          })
+          .catch((err) => {
+            console.error("Error retrieving user info from Google API:", err);
+            window.close();
+          });
+      }
+    }
+  }, []);
+
   const handleGoogleClick = () => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || localStorage.getItem("google_client_id") || "950337583648-52mep6h49s1sh1m0f58r6hsmj9sde4a4.apps.googleusercontent.com";
+    const redirectUri = `${window.location.origin}/signin`;
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=openid%20profile%20email`;
+
     const width = 500;
-    const height = 600;
+    const height = 650;
     const left = window.screen.width / 2 - width / 2;
     const top = window.screen.height / 2 - height / 2;
-    
+
     const popup = window.open(
-      "/auth/google-chooser",
+      url,
       "Google Sign-In",
       `width=${width},height=${height},top=${top},left=${left},status=no,resizable=yes`
     );
-    
+
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === "GOOGLE_AUTH_SUCCESS") {
         const { name, email, picture } = event.data;
         localStorage.setItem("google_authenticated", "true");
-        localStorage.setItem("profile_full_name", name);
+        localStorage.setItem("profile_full_name", name || "Emmanuel Mensah");
         localStorage.setItem("profile_email", email);
         if (picture) {
           localStorage.setItem("profile_image_url", picture);
@@ -57,7 +92,7 @@ export default function SignIn() {
         navigate("/onboarding");
       }
     };
-    
+
     window.addEventListener("message", handleMessage);
   };
 
@@ -108,6 +143,21 @@ export default function SignIn() {
             <AppleIcon />
             Continue with Apple
           </button>
+          <div className="w-full flex justify-center mt-1">
+            <button
+              type="button"
+              onClick={() => {
+                const id = prompt("Enter your Google Cloud OAuth Client ID:", localStorage.getItem("google_client_id") || "");
+                if (id !== null) {
+                  localStorage.setItem("google_client_id", id.trim());
+                  alert("Google Client ID updated successfully!");
+                }
+              }}
+              className="text-[10px] text-center text-slate-400 hover:text-slate-600 underline cursor-pointer"
+            >
+              Configure Custom Google Client ID
+            </button>
+          </div>
         </div>
 
         <div className="my-6 flex items-center gap-4">
