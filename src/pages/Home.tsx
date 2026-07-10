@@ -135,11 +135,14 @@ export default function Home() {
     return "evening";
   })();
 
+  const fullName = localStorage.getItem("profile_full_name") || "Emmanuel Mensah";
+  const firstName = fullName.split(" ")[0];
+
   return (
     <PhoneShell>
       <div className="px-6 pt-4">
         <h1 className="display text-5xl text-foreground">Good {timeOfDay},</h1>
-        <h2 className="display-bold text-6xl text-foreground mt-1">Emmanuel</h2>
+        <h2 className="display-bold text-6xl text-foreground mt-1">{firstName}</h2>
         <div className="mt-5 text-sm text-muted-foreground">
           <p className="text-foreground/80 font-medium">{locationText.farm}</p>
           <p>{locationText.region}</p>

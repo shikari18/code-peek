@@ -103,6 +103,7 @@ export default function SignIn() {
         localStorage.setItem("profile_phone", phone);
         
         localStorage.setItem("onboarding_completed", "true");
+        window.dispatchEvent(new Event("profile_updated"));
         
         window.removeEventListener("message", handleMessage);
         navigate("/home");
@@ -137,6 +138,7 @@ export default function SignIn() {
         
         localStorage.setItem("profile_image_url", "APPLE_AVATAR");
         localStorage.setItem("onboarding_completed", "true");
+        window.dispatchEvent(new Event("profile_updated"));
         
         window.removeEventListener("message", handleMessage);
         navigate("/home");

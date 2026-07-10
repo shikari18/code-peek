@@ -8,10 +8,13 @@ export function TopBar() {
     return localStorage.getItem("selected_language") || "en";
   });
 
+  const [profileImgSrc, setProfileImgSrc] = useState(() => {
+    return localStorage.getItem("profile_image_url") || profileImg;
+  });
+
   const handleLangChange = (newLang: string) => {
     setLang(newLang);
     localStorage.setItem("selected_language", newLang);
-    // Dispatch event to let other components know the language changed in real-time
     window.dispatchEvent(new Event("language_changed"));
   };
 
@@ -19,8 +22,15 @@ export function TopBar() {
     const handleUpdate = () => {
       setLang(localStorage.getItem("selected_language") || "en");
     };
+    const handleProfileUpdate = () => {
+      setProfileImgSrc(localStorage.getItem("profile_image_url") || profileImg);
+    };
     window.addEventListener("language_changed", handleUpdate);
-    return () => window.removeEventListener("language_changed", handleUpdate);
+    window.addEventListener("profile_updated", handleProfileUpdate);
+    return () => {
+      window.removeEventListener("language_changed", handleUpdate);
+      window.removeEventListener("profile_updated", handleProfileUpdate);
+    };
   }, []);
 
   return (
@@ -49,9 +59,15 @@ export function TopBar() {
         <Link
           href="/profile"
           aria-label="Profile"
-          className="h-9 w-9 rounded-full overflow-hidden ring-1 ring-border"
+          className="h-9 w-9 rounded-full overflow-hidden ring-1 ring-border flex items-center justify-center bg-slate-900 text-white"
         >
-          <img src={profileImg} alt="Emmanuel" width={36} height={36} loading="lazy" className="h-full w-full object-cover" />
+          {profileImgSrc === "APPLE_AVATAR" ? (
+            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current text-slate-300">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+            </svg>
+          ) : (
+            <img src={profileImgSrc} alt="Emmanuel" width={36} height={36} loading="lazy" className="h-full w-full object-cover" />
+          )}
         </Link>
       </div>
     </header>
