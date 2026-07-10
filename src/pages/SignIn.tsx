@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Fingerprint, Shield, CheckCircle2 } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Fingerprint, Shield, CheckCircle2, ChevronRight } from "lucide-react";
 
 export default function SignIn() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -9,6 +9,23 @@ export default function SignIn() {
 
   const [scanning, setScanning] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false);
+  const [showGoogleOverlay, setShowGoogleOverlay] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const handleGoogleAccountSelect = (name: string, email: string) => {
+    setGoogleLoading(true);
+    setTimeout(() => {
+      setGoogleLoading(false);
+      setShowGoogleOverlay(false);
+      // Save details to localStorage so they are real
+      localStorage.setItem("google_authenticated", "true");
+      localStorage.setItem("profile_full_name", name);
+      localStorage.setItem("profile_email", email);
+      localStorage.setItem("onboarding_completed", "false"); // let them complete onboarding first
+      navigate("/onboarding");
+    }, 1500);
+  };
+
   const biometricsEnabled = localStorage.getItem("security_biometrics") === "true";
   const biometricMethod = localStorage.getItem("security_biometrics_method") as "fingerprint" | "face_id" | null;
 
@@ -44,7 +61,7 @@ export default function SignIn() {
         </p>
 
         <div className="mt-8 space-y-3">
-          <button onClick={() => navigate("/onboarding")} className="w-full py-3.5 rounded-full bg-white border border-border/70 flex items-center justify-center gap-3 font-medium text-[15px] shadow-sm hover:bg-accent/40 transition-colors">
+          <button onClick={() => setShowGoogleOverlay(true)} className="w-full py-3.5 rounded-full bg-white border border-border/70 flex items-center justify-center gap-3 font-medium text-[15px] shadow-sm hover:bg-slate-50 transition-colors cursor-pointer">
             <GoogleIcon />
             Continue with Google
           </button>
@@ -163,6 +180,100 @@ export default function SignIn() {
           <p className="text-sm text-slate-400 mt-2">
             {scanSuccess ? "Redirecting to your dashboard..." : biometricMethod === "face_id" ? "Please look directly at your screen" : "Place your finger on the fingerprint reader"}
           </p>
+        </div>
+      )}
+
+      {/* ── Google Account Chooser Overlay ── */}
+      {showGoogleOverlay && (
+        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end justify-center animate-fade-in">
+          <div className="w-full bg-white rounded-t-[32px] p-6 shadow-2xl pb-8 animate-slide-up max-h-[85%] overflow-y-auto flex flex-col text-slate-800">
+            {/* Google Logo */}
+            <div className="flex justify-center mb-6">
+              <svg viewBox="0 0 74 24" className="h-7" fill="currentColor">
+                <path fill="#4285F4" d="M10.24 12.3v-2.31h9.19c.09.48.14.97.14 1.54 0 2.4-.64 4.8-2.2 6.36-1.52 1.56-3.48 2.4-5.99 2.4a9.98 9.98 0 0 1-9.98-9.98A9.98 9.98 0 0 1 11.38 0c2.72 0 4.96.99 6.64 2.58l-1.68 1.68A7.2 7.2 0 0 0 11.38 2.4a7.58 7.58 0 0 0-7.58 7.58 7.58 7.58 0 0 0 7.58 7.58c1.94 0 3.52-.77 4.54-1.8.84-.84 1.34-2.07 1.48-3.46h-7.16Z"/>
+                <path fill="#EA4335" d="M29.56 5.86c3.2 0 5.76 2.56 5.76 5.76s-2.56 5.76-5.76 5.76-5.76-2.56-5.76-5.76 2.56-5.76 5.76-5.76m0 9.22c1.92 0 3.46-1.54 3.46-3.46s-1.54-3.46-3.46-3.46-3.46 1.54-3.46 3.46 1.54 3.46 3.46 3.46"/>
+                <path fill="#FBBC05" d="M42.36 5.86c3.2 0 5.76 2.56 5.76 5.76s-2.56 5.76-5.76 5.76-5.76-2.56-5.76-5.76 2.56-5.76 5.76-5.76m0 9.22c1.92 0 3.46-1.54 3.46-3.46s-1.54-3.46-3.46-3.46-3.46 1.54-3.46 3.46 1.54 3.46 3.46 3.46"/>
+                <path fill="#4285F4" d="M55.16 5.86c3.07 0 5.57 2.43 5.57 5.76a5.53 5.53 0 0 1-5.57 5.76c-1.8 0-3.04-.84-3.52-1.68h-.06v6.62H49.1V6.16h2.24v1.24h.06c.48-.84 1.72-1.54 3.76-1.54m-.48 9.22c1.92 0 3.26-1.54 3.26-3.46s-1.34-3.46-3.26-3.46-3.26 1.54-3.26 3.46 1.34 3.46 3.26 3.46"/>
+                <path fill="#34A853" d="M64.6 1.1h2.24v16.14H64.6z"/>
+                <path fill="#EA4335" d="M72.28 12.38c1.38 0 2.46-.7 3.01-1.74L70.4 8.78c0-1.74 1.32-2.92 3.16-2.92 1.9 0 3.1 1.22 3.56 2.16l.24.58-6.1 2.52a2.38 2.38 0 0 0 2.22 2.2c1.28 0 2.06-.64 2.62-1.42l1.8 1.2c-.84 1.28-2.6 2.64-4.82 2.64-3.2 0-5.76-2.56-5.76-5.76 0-3.2 2.56-5.76 5.76-5.76s3.04 1.62 3.04 3.08v.86h-8.8Z"/>
+              </svg>
+            </div>
+
+            <h3 className="text-xl font-semibold text-center text-slate-800">Choose an account</h3>
+            <p className="text-sm text-center text-slate-500 mt-1 mb-6">to continue to FishFarm OS</p>
+
+            {googleLoading ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-4">
+                <div className="h-10 w-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm font-semibold text-slate-600">Signing you in securely...</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Account 1 */}
+                <button
+                  onClick={() => handleGoogleAccountSelect("Emmanuel Darko", "darka.farm@gmail.com")}
+                  className="w-full p-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-between transition-colors active:scale-[0.99] text-left cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center">
+                      ED
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Emmanuel Darko</p>
+                      <p className="text-xs text-slate-500">darka.farm@gmail.com</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-slate-400" />
+                </button>
+
+                {/* Account 2 */}
+                <button
+                  onClick={() => handleGoogleAccountSelect("Volta Farm Admin", "admin@voltafarm.gh")}
+                  className="w-full p-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-between transition-colors active:scale-[0.99] text-left cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center">
+                      VA
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Volta Farm Admin</p>
+                      <p className="text-xs text-slate-500">admin@voltafarm.gh</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-slate-400" />
+                </button>
+
+                {/* Custom text-input for typing other account */}
+                <div className="pt-2">
+                  <div className="flex items-center gap-4 py-3 px-1 border-t border-slate-100 text-slate-500 text-xs">
+                    <span>Or sign in with another Google account:</span>
+                  </div>
+                  <input
+                    type="email"
+                    placeholder="Enter other google email..."
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && e.currentTarget.value) {
+                        const emailInput = e.currentTarget.value;
+                        const nameFromEmail = emailInput.split("@")[0].replace(/[^a-zA-Z]/g, " ");
+                        const formattedName = nameFromEmail.charAt(0).toUpperCase() + nameFromEmail.slice(1);
+                        handleGoogleAccountSelect(formattedName || "Google Farmer", emailInput);
+                      }
+                    }}
+                    className="w-full py-3.5 px-4 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:border-primary placeholder:text-slate-400"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1 px-1">Press Enter to proceed</p>
+                </div>
+
+                {/* Cancel Button */}
+                <button
+                  onClick={() => setShowGoogleOverlay(false)}
+                  className="w-full py-3.5 mt-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 font-semibold text-sm hover:bg-slate-100 transition-colors active:scale-95 cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -216,7 +216,7 @@ export default function Profile() {
   };
 
   const langLabel: Record<string, string> = {
-    en: "English", tw: "Twi (Akan)", ha: "Hausa", fr: "French"
+    en: "English", tw: "Twi (Akan)", ha: "Hausa", fr: "French", yo: "Yoruba", pcm: "Pidgin"
   };
 
   return (
@@ -323,6 +323,8 @@ export default function Profile() {
               <option value="tw">Twi</option>
               <option value="ha">Hausa</option>
               <option value="fr">French</option>
+              <option value="yo">Yoruba</option>
+              <option value="pcm">Pidgin</option>
             </select>
           </div>
 

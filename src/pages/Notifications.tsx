@@ -40,17 +40,32 @@ const fetchAbenaTTS = createServerFn({ method: "POST" })
 
     try {
       let textToSpeak = data.text;
-      const isTwi = data.voice.includes("twi");
-      const isHausa = data.voice.includes("hau");
+      const isTwi = data.voice === "abena";
+      const isHausa = data.voice === "abubakar";
+      const isYoruba = data.voice === "folami";
+      const isPidgin = data.voice === "kobby" || data.voice === "james";
+      const needsTranslation = isTwi || isHausa || isYoruba || isPidgin;
 
-      if (isTwi || isHausa) {
+      if (needsTranslation) {
         let translatedText = "";
         const geminiKey = data.geminiApiKey || process.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || "";
         
+        let targetLang = "Twi (Akan)";
+        let langCode = "ak";
+        if (isHausa) {
+          targetLang = "Hausa";
+          langCode = "ha";
+        } else if (isYoruba) {
+          targetLang = "Yoruba";
+          langCode = "yo";
+        } else if (isPidgin) {
+          targetLang = "Nigerian Pidgin English";
+          langCode = "pcm";
+        }
+
         // 1. Try Gemini Translation
         if (geminiKey) {
           try {
-            const targetLang = isTwi ? "Twi (Akan)" : "Hausa";
             const prompt = `Translate this aquaculture alert into fluent, pure ${targetLang} language. Do not mix English words in it; use native ${targetLang} terms where possible. Output ONLY the translation, no explanation or notes:\n\n"${data.text}"`;
             
             const transRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
@@ -79,17 +94,18 @@ const fetchAbenaTTS = createServerFn({ method: "POST" })
         // 2. Try MyMemory Translation Fallback if Gemini key is missing or failed
         if (!translatedText) {
           try {
-            const langCode = isTwi ? "ak" : "ha";
-            console.log(`[ServerFn] Running fallback MyMemory translation for en|${langCode}...`);
-            const myMemoryRes = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(data.text)}&langpair=en|${langCode}`, {
-              signal: controller.signal
-            });
-            if (myMemoryRes.ok) {
-              const myMemoryJson = await myMemoryRes.json();
-              const translated = myMemoryJson.responseData?.translatedText?.trim();
-              if (translated && !translated.toLowerCase().includes("mymemory warning")) {
-                console.log(`[ServerFn] Translated alert via MyMemory to ${langCode}: "${translated}"`);
-                translatedText = translated;
+            if (!isPidgin) {
+              console.log(`[ServerFn] Running fallback MyMemory translation for en|${langCode}...`);
+              const myMemoryRes = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(data.text)}&langpair=en|${langCode}`, {
+                signal: controller.signal
+              });
+              if (myMemoryRes.ok) {
+                const myMemoryJson = await myMemoryRes.json();
+                const translated = myMemoryJson.responseData?.translatedText?.trim();
+                if (translated && !translated.toLowerCase().includes("mymemory warning")) {
+                  console.log(`[ServerFn] Translated alert via MyMemory to ${langCode}: "${translated}"`);
+                  translatedText = translated;
+                }
               }
             }
           } catch (e) {
@@ -110,6 +126,36 @@ const fetchAbenaTTS = createServerFn({ method: "POST" })
               textToSpeak = "Tilapia boɔ akɔ soro nnɛ wɔ Accra dwam.";
             } else if (data.text.includes("feeding") || data.text.includes("calculate") || data.text.includes("Reminder")) {
               textToSpeak = "Ɛberɛ adu so sɛ wobu aduane gu afiri mmiensa no mu.";
+            }
+          } else if (isHausa) {
+            if (data.text.includes("Rain") || data.text.includes("weather")) {
+              textToSpeak = "Ana sa ran yin ruwa nan kusa. Da fatan za a rage abinci.";
+            } else if (data.text.includes("oxygen") || data.text.includes("DO")) {
+              textToSpeak = "Gargadi: Sinadarin oxygen yana raguwa a tafki na biyu. Kunna injin oxygen yanzu.";
+            } else if (data.text.includes("wholesale") || data.text.includes("Price")) {
+              textToSpeak = "Farashin kifi ya karu a yau a Accra.";
+            } else if (data.text.includes("feeding") || data.text.includes("calculate") || data.text.includes("Reminder")) {
+              textToSpeak = "Lokacin ciyar da kifi ya yi. Ciyar da tafki na uku yanzu.";
+            }
+          } else if (isYoruba) {
+            if (data.text.includes("Rain") || data.text.includes("weather")) {
+              textToSpeak = "Rọgbọrọ n bọ. Dinku ounjẹ fun adagun omi kinni nipasẹ idaji.";
+            } else if (data.text.includes("oxygen") || data.text.includes("DO")) {
+              textToSpeak = "Afẹfẹ atẹgun n lọ silẹ ni adagun omi keji. Tan ẹrọ afẹfẹ ni kiakia.";
+            } else if (data.text.includes("wholesale") || data.text.includes("Price")) {
+              textToSpeak = "Owo tilapia ti lọ soke ni ọja Accra loni.";
+            } else if (data.text.includes("feeding") || data.text.includes("calculate") || data.text.includes("Reminder")) {
+              textToSpeak = "Akoko ti to lati ṣe iṣiro ounjẹ. Fun adagun omi kẹta ni apo mẹta.";
+            }
+          } else if (isPidgin) {
+            if (data.text.includes("Rain") || data.text.includes("weather")) {
+              textToSpeak = "Rain de load fast fast. Reduce food for Pond 1 by half oh.";
+            } else if (data.text.includes("oxygen") || data.text.includes("DO")) {
+              textToSpeak = "Sensor de show say oxygen de drop for Pond 2. Turn on aerators sharp sharp!";
+            } else if (data.text.includes("wholesale") || data.text.includes("Price")) {
+              textToSpeak = "Tilapia price don go up today for Accra market.";
+            } else if (data.text.includes("feeding") || data.text.includes("calculate") || data.text.includes("Reminder")) {
+              textToSpeak = "Time don reach to calculate food for the fish. Give 3 bags for Pond 3.";
             }
           }
         }
@@ -506,9 +552,13 @@ export default function Notifications() {
     const text = body.replace(/\.?\s*Click to know more\.?/gi, "").trim();
 
     if (lang === "tw") {
-      playAbena(id, text, "abena_twi_high");   // Abena High — Twi (Akan)
+      playAbena(id, text, "abena");   // Abena High — Twi (Akan)
     } else if (lang === "ha") {
-      playAbena(id, text, "abubakar_hau");     // Abubakar — Hausa
+      playAbena(id, text, "abubakar");     // Abubakar — Hausa
+    } else if (lang === "yo") {
+      playAbena(id, text, "folami");       // Folami — Yoruba
+    } else if (lang === "pcm") {
+      playAbena(id, text, "kobby");        // Kobby — Ghanaian Pidgin
     } else {
       playGemini(id, text);
     }
@@ -531,9 +581,16 @@ export default function Notifications() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="display text-6xl">Alerts</h1>
           <div className="flex gap-2 items-center">
-            <button onClick={handleMarkAllRead} className="text-[10px] uppercase tracking-wider font-bold text-primary hover:opacity-85 active:scale-95 transition-all">Mark Read</button>
+            <button
+              onClick={() => window.dispatchEvent(new Event("trigger_test_alert"))}
+              className="text-[10px] uppercase tracking-wider font-bold text-amber-600 hover:opacity-85 active:scale-95 transition-all cursor-pointer"
+            >
+              Test Alert
+            </button>
             <span className="text-slate-300">|</span>
-            <button onClick={handleClearAll} className="text-[10px] uppercase tracking-wider font-bold text-rose-500 hover:opacity-85 active:scale-95 transition-all">Clear</button>
+            <button onClick={handleMarkAllRead} className="text-[10px] uppercase tracking-wider font-bold text-primary hover:opacity-85 active:scale-95 transition-all cursor-pointer">Mark Read</button>
+            <span className="text-slate-300">|</span>
+            <button onClick={handleClearAll} className="text-[10px] uppercase tracking-wider font-bold text-rose-500 hover:opacity-85 active:scale-95 transition-all cursor-pointer">Clear</button>
           </div>
         </div>
 

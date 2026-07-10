@@ -38,8 +38,24 @@ function wrap(Component: React.ComponentType) {
 }
 
 function AppShell() {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const showNav = !NO_NAV_ROUTES.has(location);
+
+  // Redirect to Welcome if no language chosen, or to SignIn if onboarding not complete
+  useEffect(() => {
+    const hasLang = localStorage.getItem("selected_language");
+    const onboardingCompleted = localStorage.getItem("onboarding_completed") === "true";
+    
+    if (!hasLang) {
+      if (location !== "/" && location !== "/welcome") {
+        navigate("/", { replace: true });
+      }
+    } else if (!onboardingCompleted) {
+      if (location !== "/" && location !== "/welcome" && location !== "/signin" && location !== "/onboarding") {
+        navigate("/signin", { replace: true });
+      }
+    }
+  }, [location, navigate]);
 
   const [isBlocked, setIsBlocked] = useState(false);
   const [promptCount, setPromptCount] = useState(0);
@@ -138,12 +154,10 @@ function AppShell() {
 
     let currentAlertIndex = 0;
 
-    const interval = setInterval(() => {
-      // Pick next alert from the pool
+    const triggerAlert = () => {
       const alert = alertsPool[currentAlertIndex];
       currentAlertIndex = (currentAlertIndex + 1) % alertsPool.length;
 
-      // Add to local storage
       const stored = localStorage.getItem("app_notifications");
       const currentNotifications = stored ? JSON.parse(stored) : [];
       
@@ -157,11 +171,8 @@ function AppShell() {
       };
 
       localStorage.setItem("app_notifications", JSON.stringify([newNotification, ...currentNotifications]));
-      
-      // Dispatch custom event to let components know notifications updated in real-time
       window.dispatchEvent(new Event("notifications_updated"));
 
-      // Trigger standard browser push notification if permitted
       if ("Notification" in window && Notification.permission === "granted") {
         try {
           const instance = new Notification(alert.title, {
@@ -177,9 +188,18 @@ function AppShell() {
           console.warn("Push notification failed to fire:", e);
         }
       }
-    }, 15 * 60 * 1000); // Send at most one alert every 15 minutes
+    };
 
-    return () => clearInterval(interval);
+    setTimeout(triggerAlert, 2000);
+
+    const interval = setInterval(triggerAlert, 45 * 1000);
+
+    window.addEventListener("trigger_test_alert", triggerAlert);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("trigger_test_alert", triggerAlert);
+    };
   }, []);
 
   return (

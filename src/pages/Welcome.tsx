@@ -7,6 +7,8 @@ const languages = [
   { code: "tw", name: "Twi", native: "Twi" },
   { code: "ha", name: "Hausa", native: "Hausa" },
   { code: "fr", name: "French", native: "Français" },
+  { code: "yo", name: "Yoruba", native: "Yorùbá" },
+  { code: "pcm", name: "Pidgin", native: "Pidgin" },
 ] as const;
 
 export default function Welcome() {
