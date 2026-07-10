@@ -116,6 +116,7 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
+        <script src="https://accounts.google.com/gsi/client" async defer></script>
       </head>
       <body>
         {children}

@@ -1,6 +1,24 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Fingerprint, Shield, CheckCircle2, ChevronRight } from "lucide-react";
+
+const decodeJwt = (token: string) => {
+  try {
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      window
+        .atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    console.error("Failed to decode JWT:", e);
+    return null;
+  }
+};
 
 export default function SignIn() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -11,6 +29,49 @@ export default function SignIn() {
   const [scanSuccess, setScanSuccess] = useState(false);
   const [showGoogleOverlay, setShowGoogleOverlay] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const initGoogle = () => {
+      if (!active) return;
+      if (window.google?.accounts?.id) {
+        const client_id = import.meta.env.VITE_GOOGLE_CLIENT_ID || localStorage.getItem("google_client_id") || "950337583648-52mep6h49s1sh1m0f58r6hsmj9sde4a4.apps.googleusercontent.com";
+        
+        window.google.accounts.id.initialize({
+          client_id: client_id,
+          callback: (response: any) => {
+            const payload = decodeJwt(response.credential);
+            if (payload) {
+              localStorage.setItem("google_authenticated", "true");
+              localStorage.setItem("profile_full_name", payload.name || "Emmanuel Mensah");
+              localStorage.setItem("profile_email", payload.email);
+              if (payload.picture) {
+                localStorage.setItem("profile_image_url", payload.picture);
+              }
+              localStorage.setItem("onboarding_completed", "false");
+              navigate("/onboarding");
+            }
+          }
+        });
+
+        const btnEl = document.getElementById("google-signin-btn");
+        if (btnEl) {
+          window.google.accounts.id.renderButton(btnEl, {
+            theme: "outline",
+            size: "large",
+            width: btnEl.clientWidth || 380,
+            text: "continue_with",
+            shape: "circle"
+          });
+        }
+      } else {
+        setTimeout(initGoogle, 250);
+      }
+    };
+
+    initGoogle();
+    return () => { active = false; };
+  }, []);
 
   const handleGoogleAccountSelect = (name: string, email: string) => {
     setGoogleLoading(true);
@@ -61,11 +122,23 @@ export default function SignIn() {
         </p>
 
         <div className="mt-8 space-y-3">
-          <button onClick={() => setShowGoogleOverlay(true)} className="w-full py-3.5 rounded-full bg-white border border-border/70 flex items-center justify-center gap-3 font-medium text-[15px] shadow-sm hover:bg-slate-50 transition-colors cursor-pointer">
-            <GoogleIcon />
-            Continue with Google
-          </button>
-          <button onClick={() => navigate("/onboarding")} className="w-full py-3.5 rounded-full bg-black text-white flex items-center justify-center gap-3 font-medium text-[15px] shadow-sm">
+          <div className="w-full flex flex-col items-center gap-1.5">
+            <div id="google-signin-btn" className="w-full flex justify-center min-h-[44px]" />
+            <button
+              type="button"
+              onClick={() => {
+                const id = prompt("Enter your Google Cloud OAuth Client ID:", localStorage.getItem("google_client_id") || "");
+                if (id !== null) {
+                  localStorage.setItem("google_client_id", id.trim());
+                  window.location.reload();
+                }
+              }}
+              className="text-[10px] text-center text-slate-400 hover:text-slate-600 underline cursor-pointer"
+            >
+              Configure Custom Google Client ID
+            </button>
+          </div>
+          <button type="button" onClick={() => navigate("/onboarding")} className="w-full py-3.5 rounded-full bg-black text-white flex items-center justify-center gap-3 font-medium text-[15px] shadow-sm cursor-pointer">
             <AppleIcon />
             Continue with Apple
           </button>

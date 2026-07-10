@@ -31,6 +31,7 @@ export default function Profile() {
   const [fishCount, setFishCount] = useState(() => localStorage.getItem("onboarding_fish_count") || "");
   const [pondCount, setPondCount] = useState(() => localStorage.getItem("onboarding_pond_count") || "");
   const [avgWeight, setAvgWeight] = useState(() => localStorage.getItem("onboarding_avg_weight") || "");
+  const [profileImgSrc, setProfileImgSrc] = useState(() => localStorage.getItem("profile_image_url") || profileImg);
 
   // Interactive Account Modals State
   const [activeModal, setActiveModal] = useState<"security" | "subscription" | "billing" | "team" | null>(null);
@@ -225,7 +226,7 @@ export default function Profile() {
         {/* Avatar + name */}
         <div className="flex items-start gap-5 mt-2">
           <div className="h-24 w-24 rounded-full overflow-hidden border border-border/70 shrink-0 shadow-md">
-            <img src={profileImg} alt={fullName} width={96} height={96} loading="lazy" className="h-full w-full object-cover" />
+            <img src={profileImgSrc} alt={fullName} width={96} height={96} loading="lazy" className="h-full w-full object-cover" />
           </div>
           <div className="flex-1 pt-1">
             <h1 className="display-bold text-3xl leading-tight">{fullName}</h1>
