@@ -161,13 +161,22 @@ const fetchAbenaTTS = createServerFn({ method: "POST" })
         }
       }
 
+      let mobobiVoice = data.voice;
+      if (data.voice === "abena") {
+        mobobiVoice = "abena_twi_high";
+      } else if (data.voice === "abubakar") {
+        mobobiVoice = "abubakar_hau";
+      } else if (data.voice === "folami" || data.voice === "kobby") {
+        mobobiVoice = "abena_twi_high";
+      }
+
       const res = await fetch(ABENA_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${ABENA_KEY}`
         },
-        body: JSON.stringify({ text: textToSpeak, voice: data.voice, speed: 1.0 }),
+        body: JSON.stringify({ text: textToSpeak, voice: mobobiVoice, speed: 1.0 }),
         signal: controller.signal
       });
 
@@ -221,8 +230,11 @@ export default function Notifications() {
     if (notifications.length === 0) return;
     
     const lang = localStorage.getItem("selected_language") || "en";
-    if (lang === "tw" || lang === "ha") {
-      const voice = lang === "tw" ? "abena_twi_high" : "abubakar_hau";
+    if (lang === "tw" || lang === "ha" || lang === "yo" || lang === "pcm") {
+      let voice = "abena";
+      if (lang === "ha") voice = "abubakar";
+      else if (lang === "yo") voice = "folami";
+      else if (lang === "pcm") voice = "kobby";
       
       // Clean up old cached keys that are no longer in the active notifications list
       try {

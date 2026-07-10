@@ -23,10 +23,11 @@ import PondDevice from "@/pages/PondDevice";
 import FarmerChat from "@/pages/FarmerChat";
 import NotFound from "@/pages/not-found";
 import GoogleChooser from "@/pages/GoogleChooser";
+import AppleChooser from "@/pages/AppleChooser";
 
 const queryClient = new QueryClient();
 
-const NO_NAV_ROUTES = new Set(["/", "/welcome", "/signin", "/onboarding", "/auth/google-chooser"]);
+const NO_NAV_ROUTES = new Set(["/", "/welcome", "/signin", "/onboarding", "/auth/google-chooser", "/auth/apple-chooser"]);
 
 function wrap(Component: React.ComponentType) {
   return function WrappedPage() {
@@ -48,11 +49,11 @@ function AppShell() {
     const onboardingCompleted = localStorage.getItem("onboarding_completed") === "true";
     
     if (!hasLang) {
-      if (location !== "/" && location !== "/welcome" && location !== "/auth/google-chooser") {
+      if (location !== "/" && location !== "/welcome" && location !== "/auth/google-chooser" && location !== "/auth/apple-chooser") {
         navigate("/", { replace: true });
       }
     } else if (!onboardingCompleted) {
-      if (location !== "/" && location !== "/welcome" && location !== "/signin" && location !== "/onboarding" && location !== "/auth/google-chooser") {
+      if (location !== "/" && location !== "/welcome" && location !== "/signin" && location !== "/onboarding" && location !== "/auth/google-chooser" && location !== "/auth/apple-chooser") {
         navigate("/signin", { replace: true });
       }
     }
@@ -191,9 +192,9 @@ function AppShell() {
       }
     };
 
-    setTimeout(triggerAlert, 2000);
+    setTimeout(triggerAlert, 5000);
 
-    const interval = setInterval(triggerAlert, 45 * 1000);
+    const interval = setInterval(triggerAlert, 5 * 60 * 1000);
 
     window.addEventListener("trigger_test_alert", triggerAlert);
 
@@ -221,6 +222,7 @@ function AppShell() {
             <Route path="/welcome" component={wrap(Welcome)} />
             <Route path="/onboarding" component={wrap(Onboarding)} />
             <Route path="/auth/google-chooser" component={wrap(GoogleChooser)} />
+            <Route path="/auth/apple-chooser" component={wrap(AppleChooser)} />
             <Route path="/community-buying" component={wrap(CommunityBuying)} />
             <Route path="/harvest-marketplace" component={wrap(HarvestMarketplace)} />
             <Route path="/credit-score" component={wrap(CreditScore)} />

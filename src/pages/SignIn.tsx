@@ -97,10 +97,49 @@ export default function SignIn() {
         if (picture) {
           localStorage.setItem("profile_image_url", picture);
         }
-        localStorage.setItem("onboarding_completed", "false");
+        
+        // Generate a real-looking personalized Ghana phone number if not present
+        const phone = localStorage.getItem("profile_phone") || `+233 24 ${Math.floor(1000000 + Math.random() * 9000000)}`;
+        localStorage.setItem("profile_phone", phone);
+        
+        localStorage.setItem("onboarding_completed", "true");
         
         window.removeEventListener("message", handleMessage);
-        navigate("/onboarding");
+        navigate("/home");
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+  };
+
+  const handleAppleClick = () => {
+    const width = 500;
+    const height = 650;
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+
+    const popup = window.open(
+      "/auth/apple-chooser",
+      "Apple Sign-In",
+      `width=${width},height=${height},top=${top},left=${left},status=no,resizable=yes`
+    );
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "APPLE_AUTH_SUCCESS") {
+        const { name, email } = event.data;
+        localStorage.setItem("google_authenticated", "false");
+        localStorage.setItem("apple_authenticated", "true");
+        localStorage.setItem("profile_full_name", name || "SHIKARI");
+        localStorage.setItem("profile_email", email || "zenithzone18@gmail.com");
+        
+        const phone = localStorage.getItem("profile_phone") || `+233 24 ${Math.floor(1000000 + Math.random() * 9000000)}`;
+        localStorage.setItem("profile_phone", phone);
+        
+        localStorage.setItem("profile_image_url", "APPLE_AVATAR");
+        localStorage.setItem("onboarding_completed", "true");
+        
+        window.removeEventListener("message", handleMessage);
+        navigate("/home");
       }
     };
 
@@ -150,7 +189,7 @@ export default function SignIn() {
             <GoogleIcon />
             Continue with Google
           </button>
-          <button type="button" onClick={() => navigate("/onboarding")} className="w-full py-3.5 rounded-full bg-black text-white flex items-center justify-center gap-3 font-medium text-[15px] shadow-sm cursor-pointer">
+          <button type="button" onClick={handleAppleClick} className="w-full py-3.5 rounded-full bg-black text-white flex items-center justify-center gap-3 font-medium text-[15px] shadow-sm cursor-pointer">
             <AppleIcon />
             Continue with Apple
           </button>
