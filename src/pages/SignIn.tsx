@@ -62,9 +62,12 @@ export default function SignIn() {
   }, []);
 
   const handleGoogleClick = () => {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || localStorage.getItem("google_client_id") || "950337583648-52mep6h49s1sh1m0f58r6hsmj9sde4a4.apps.googleusercontent.com";
+    const customClientId = localStorage.getItem("google_client_id") || import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
     const redirectUri = `${window.location.origin}/signin`;
-    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=openid%20profile%20email`;
+    
+    const url = customClientId 
+      ? `https://accounts.google.com/o/oauth2/v2/auth?client_id=${customClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=openid%20profile%20email`
+      : "/auth/google-chooser";
 
     const width = 500;
     const height = 650;
