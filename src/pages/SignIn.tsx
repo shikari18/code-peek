@@ -31,11 +31,13 @@ export default function SignIn() {
   const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
-    // Check if we are running in the Google OAuth redirect popup
+    // Check if we are running in the OAuth redirect popup (Google or Apple)
     if (window.opener && window.location.hash) {
       const hash = window.location.hash.substring(1);
       const params = new URLSearchParams(hash);
       const accessToken = params.get("access_token");
+      const idToken = params.get("id_token");
+      const userParam = params.get("user");
       
       if (accessToken) {
         // Fetch real user metadata from Google's userinfo endpoint
@@ -57,6 +59,36 @@ export default function SignIn() {
             console.error("Error retrieving user info from Google API:", err);
             window.close();
           });
+      } else if (idToken) {
+        // Real Apple Sign-In callback
+        const payload = decodeJwt(idToken);
+        if (payload) {
+          let name = "Apple User";
+          if (userParam) {
+            try {
+              const userObj = JSON.parse(decodeURIComponent(userParam));
+              if (userObj.name) {
+                name = `${userObj.name.firstName || ""} ${userObj.name.lastName || ""}`.trim();
+              }
+            } catch (e) {}
+          }
+          if ((name === "Apple User" || !name) && payload.email) {
+            const username = payload.email.split("@")[0];
+            name = username.charAt(0).toUpperCase() + username.slice(1);
+          }
+          
+          window.opener.postMessage(
+            {
+              type: "APPLE_AUTH_SUCCESS",
+              name: name,
+              email: payload.email
+            },
+            window.location.origin
+          );
+          window.close();
+        } else {
+          window.close();
+        }
       }
     }
   }, []);
@@ -114,13 +146,28 @@ export default function SignIn() {
   };
 
   const handleAppleClick = () => {
-    const width = 500;
+    let clientId = localStorage.getItem("apple_client_id") || import.meta.env.VITE_APPLE_CLIENT_ID || "";
+    
+    if (!clientId) {
+      const input = prompt(
+        "To use real Apple Authentication, please enter your Apple Developer Services ID (Client ID):\n\n(Ensure you've registered your redirect URI in the Apple Developer Portal)",
+        ""
+      );
+      if (!input) return;
+      clientId = input.trim();
+      localStorage.setItem("apple_client_id", clientId);
+    }
+
+    const redirectUri = `${window.location.origin}/signin`;
+    const url = `https://appleid.apple.com/auth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code%20id_token&scope=name%20email&response_mode=fragment`;
+
+    const width = 550;
     const height = 650;
     const left = window.screen.width / 2 - width / 2;
     const top = window.screen.height / 2 - height / 2;
 
     const popup = window.open(
-      "/auth/apple-chooser",
+      url,
       "Apple Sign-In",
       `width=${width},height=${height},top=${top},left=${left},status=no,resizable=yes`
     );
@@ -195,7 +242,7 @@ export default function SignIn() {
             <AppleIcon />
             Continue with Apple
           </button>
-          <div className="w-full flex justify-center mt-1">
+          <div className="w-full flex justify-center mt-1 gap-3">
             <button
               type="button"
               onClick={() => {
@@ -207,7 +254,21 @@ export default function SignIn() {
               }}
               className="text-[10px] text-center text-slate-400 hover:text-slate-600 underline cursor-pointer"
             >
-              Configure Custom Google Client ID
+              Configure Google Client ID
+            </button>
+            <span className="text-[10px] text-slate-300">|</span>
+            <button
+              type="button"
+              onClick={() => {
+                const id = prompt("Enter your Apple Services ID (Client ID):", localStorage.getItem("apple_client_id") || "");
+                if (id !== null) {
+                  localStorage.setItem("apple_client_id", id.trim());
+                  alert("Apple Client ID updated successfully!");
+                }
+              }}
+              className="text-[10px] text-center text-slate-400 hover:text-slate-600 underline cursor-pointer"
+            >
+              Configure Apple Client ID
             </button>
           </div>
         </div>
@@ -439,3 +500,4 @@ function AppleIcon() {
     </svg>
   );
 }
+
